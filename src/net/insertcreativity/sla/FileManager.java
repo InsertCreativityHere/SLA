@@ -18,6 +18,8 @@ import com.dropbox.core.DbxHost;
 import com.dropbox.core.DbxRequestConfig;
 import com.dropbox.core.DbxWriteMode;
 import com.dropbox.core.json.JsonReader.FileLoadException;
+
+import net.insertcreativity.util.Logger;
 import net.insertcreativity.util.Util;
 
 /**Class responsible for encapsulating all the file management for this node; initially creates all the
@@ -140,9 +142,9 @@ public final class FileManager implements Runnable, Closeable
 	 * @throws FileLoadException If the provided key file is malformed*/
 	private DbxClient establishDatabaseConnection(String name, String authCode) throws DbxException, FileLoadException
 	{
-		log.log("Establishinc connection with master database", true);//log that the connection is being established
+		log.log("Establishinc connection with master database");//log that the connection is being established
 		DbxRequestConfig dbxRequestConfig = new DbxRequestConfig(name, Locale.getDefault().toString());//store the request configuration to use with the Dropbox SLA database
-		log.log("Connection successfully established with master database", true);//log that the connection was created successfully
+		log.log("Connection successfully established with master database");//log that the connection was created successfully
 		return new DbxClient(dbxRequestConfig, authCode, DbxHost.Default);//return the Dropbox client
 	}
 	
@@ -243,7 +245,7 @@ public final class FileManager implements Runnable, Closeable
 	/**Periodically checks the ANDAC tasks folder for this server, ensuring that it stays up to date and processes them*/
 	public void run()
 	{//TODO write the thread already
-		log.log("Starting file manager thread", true);//log that the file manager thread is being started
+		log.log("Starting file manager thread");//log that the file manager thread is being started
 		long lastModified = 0;//stores the timestamp for when the tasks file was last updated
 		File LOCK = new File(rootDir, "LOCKA.txt");//store a reference to the lock file for this file manager
 		try{//try to ensure the LOCK file is usable
@@ -261,12 +263,12 @@ public final class FileManager implements Runnable, Closeable
 	/**Closes the file manager, releasing any resources and signaling it's threads to stop*/
 	public void close()
 	{
-		log.log("Closing file manager", true);//log that the file manager is being closed
+		log.log("Closing file manager");//log that the file manager is being closed
 		keepRunning = false;//set that the file manager should stop running
 	}
 	
 	public static void main(String args[]) throws Exception
-	{
-		FileManager fileManager = FileManager.createServer(null, "Testing2", new File("C:\\Users\\ahenriksen2015\\downloads\\testing"), "zGw7BngehFAAAAAAAAAAEorYRDKDnxFue0w4cQkTN0EO2iorC-uDLwyQyuZV25SS");
+	{//TODO REMOVEME
+		FileManager.createServer(null, "Testing2", new File("C:\\Users\\ahenriksen2015\\downloads\\testing"), "zGw7BngehFAAAAAAAAAAEorYRDKDnxFue0w4cQkTN0EO2iorC-uDLwyQyuZV25SS");
 	}
 }

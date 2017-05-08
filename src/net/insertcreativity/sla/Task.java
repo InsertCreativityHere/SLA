@@ -1,6 +1,8 @@
 
 package net.insertcreativity.sla;
 
+import net.insertcreativity.util.Logger;
+
 /**Class that all tasks the ANDAC executes extends from, carrying with it the basic methods needed for
  * handling the computation of data, and outputting of results.*/
 public abstract class Task implements java.io.Serializable
