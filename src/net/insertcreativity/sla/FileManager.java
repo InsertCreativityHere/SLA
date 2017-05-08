@@ -24,38 +24,52 @@ import net.insertcreativity.util.Util;
  * necessary files for the node, and ensures that the node and it's files stay up to date with the master
  * repository and SLA database, in addition to providing a means of communication between them and the node
  * and keeping this node synced with the master repository and SLA database*/
-public class FileManager implements Runnable, Closeable
+public final class FileManager implements Runnable, Closeable
 {
+	/**Reference to the logger that the file manager outputs to*/
+	private final Logger log;
 	/**Client used to communicate with the master database*/
 	private DbxClient databaseClient;
 	/**Class loader to dynamically load in new task classes*/
 	private URLClassLoader classLoader;
-	/**Reference to the root directory that the node is running from*/
-	private final File rootDir;
 	/**The server's name in ANDAC*/
 	private final String serverName;
+	/**Reference to the root directory that the node is running from*/
+	private final File rootDir;
 	/**Flag for whether the file manager should keep running*/
 	private boolean keepRunning = false;
 	
 	/**Constructs a new file manager
+	 * @param logger Object that all the file manager's activity should be logged to
 	 * @param name Unique string identifier for this node
 	 * @param dir Reference to the directory that this node is running in
 	 * @param authCode Authorization code for accessing the master database
 	 * @throws IOException If there's an issue creating the local file environment
 	 * @throws DbxException If there's an issue communicating with the master database
 	 * @throws FileLoadException If the database key file is malformed or invalid*/
-	private FileManager(String name, File dir, String authCode) throws IOException, DbxException, FileLoadException
+	private FileManager(Logger logger, String name, File dir, String authCode) throws IOException, DbxException, FileLoadException
 	{
+		log = logger;//store a reference to the logger this file manager should use
 		rootDir = dir;//store a reference to the root directory for this node
 		serverName = "/ANDAC/Servers/" + name;//store what the server's name is in ANDAC
 		databaseClient = establishDatabaseConnection(name, authCode);//establish a connection with the master database
-		if(!(new File(dir, "bin\\Git\\git-bash.exe")).canExecute()){//if the Git bash doesn't exist or can't be executed
+		File zipExe = new File(dir, "res\\7za.exe");//store a reference to the 7zip command line executable
+		if(!zipExe.canExecute()){//if the 7zip command line doesn't exist or can't be executed
+			Util.delete(zipExe);//delete anything that might be at it's location
+			downloadFileFromDatabase(zipExe.getAbsolutePath(), "/ANDAC/7za.exe");//download a copy of the 7zip command line executable
+		}
+		File nirExe = new File(dir, "res\\nircmdc.exe");//store a reference to the NirSoft command line executable
+		if(!nirExe.canExecute()){//if the NirSoft command line doesn't exist or can't be executed
+			Util.delete(nirExe);//delete anything that might be at it's location
+			downloadFileFromDatabase(nirExe.getAbsolutePath(), "/ANDAC/nircmdc.exe");//download a copy of the NirSoft command line executable
+		}
+		if(!(new File(dir, "res\\Git\\git-bash.exe")).canExecute()){//if the Git bash doesn't exist or can't be executed
 			installGit(dir);//install Git from scratch
 		}
-		classLoader = new URLClassLoader(new URL[] {new File(rootDir, "bin\\taskClasses").toURI().toURL()});//create the class loader for this node
-		File taskClassesDir = new File(dir, "bin\\taskClasses");//store a reference to the task classes directory
+		classLoader = new URLClassLoader(new URL[] {new File(rootDir, "res\\taskClasses").toURI().toURL()});//create the class loader for this node
+		File taskClassesDir = new File(dir, "res\\taskClasses");//store a reference to the task classes directory
 		if(!taskClassesDir.isDirectory()){//if there is no valid task class directory
-			taskClassesDir.delete();//delete anything that might be at it's location
+			Util.delete(taskClassesDir);//delete anything that might be at it's location
 			if(!taskClassesDir.mkdirs()){//if the task classes directory couldn't be created
 				throw new IOException("Failed to create the task classes directory");//except that the task class directory couldn'y be made
 			}
@@ -64,15 +78,16 @@ public class FileManager implements Runnable, Closeable
 	
 	/**Creates a new file manager for a server by setting up the local file environment and establishing
 	 * connections to the master repository and master database
+	 * @param logger Object that all the file manager's activity should be logged to
 	 * @param serverName Unique string identifier for this server
 	 * @param serverDir Reference to the directory that the server is running in
 	 * @param authCode Authorization code for accessing the master database
 	 * @throws IOException If there's an issue creating the local file environment
 	 * @throws DbxException If there's an issue communicating with the master database
 	 * @throws FileLoadException If the database key file is malformed or invalid*/
-	public static FileManager createServer(Server server, String serverName, File serverDir, String authCode) throws IOException, DbxException, FileLoadException
+	public static FileManager createServer(Logger logger, String serverName, File serverDir, String authCode) throws IOException, DbxException, FileLoadException
 	{
-		FileManager serverFileManager = new FileManager(serverName, serverDir, authCode);//create a new file manager for the server
+		FileManager serverFileManager = new FileManager(logger, serverName, serverDir, authCode);//create a new file manager for the server
 		serverName = serverFileManager.serverName;//store what the server's name is in ANDAC
 		if(serverFileManager.databaseClient.getMetadata(serverName) == null){//if this server doesn't have a folder in ANDAC
 			serverFileManager.databaseClient.createFolder(serverName);//create a folder for this server in ANDAC
@@ -104,15 +119,16 @@ public class FileManager implements Runnable, Closeable
 	
 	/**Creates a new file manager for a client by setting up a local file environment, establishing a
 	 * connection to the master repository and the master database
+	 * @param logger Object that all the file manager's activity should be logged to
 	 * @param clientName Unique string identifier for this client
 	 * @param clientDir Reference to the directory that the client is running in
 	 * @param authCode Authorization code for accessing the master database
 	 * @throws IOException If there's an issue creating the local file environment
 	 * @throws DbxException If there's an issue communicating with the master database
 	 * @throws FileLoadException If the database key file is malformed or invalid*/
-	public static FileManager createClient(String clientName, File clientDir, String authCode) throws IOException, DbxException, FileLoadException
+	public static FileManager createClient(Logger logger, String clientName, File clientDir, String authCode) throws IOException, DbxException, FileLoadException
 	{
-		FileManager clientFileManager = new FileManager(clientName, clientDir, authCode);//create a new file manager for the client
+		FileManager clientFileManager = new FileManager(logger, clientName, clientDir, authCode);//create a new file manager for the client
 		return clientFileManager;//return the client's file manager
 	}
 	
@@ -122,25 +138,27 @@ public class FileManager implements Runnable, Closeable
 	 * @return A client object that can be used to make API calls to the master database
 	 * @throws DbxException If an error occurs in establishing the connection with Dropbox
 	 * @throws FileLoadException If the provided key file is malformed*/
-	private static DbxClient establishDatabaseConnection(String name, String authCode) throws DbxException, FileLoadException
+	private DbxClient establishDatabaseConnection(String name, String authCode) throws DbxException, FileLoadException
 	{
+		log.log("Establishinc connection with master database", true);//log that the connection is being established
 		DbxRequestConfig dbxRequestConfig = new DbxRequestConfig(name, Locale.getDefault().toString());//store the request configuration to use with the Dropbox SLA database
+		log.log("Connection successfully established with master database", true);//log that the connection was created successfully
 		return new DbxClient(dbxRequestConfig, authCode, DbxHost.Default);//return the Dropbox client
 	}
 	
-	/**Installs Git into the node's bin directory, removing any previous installations
+	/**Installs Git into the node's res directory, removing any previous installations
 	 * @param dir Reference to the directory this node is running in
 	 * @throws IOException If there was an issue deleting the previous Git installation or creating this one
 	 * @throws DbxException If there was an issue downloading Git from the database*/
 	private void installGit(File dir) throws IOException, DbxException
 	{
-		File gitDir = new File(dir, "bin\\Git");//create a reference to the git directory
+		File gitDir = new File(dir, "res\\Git");//create a reference to the git directory
 		if(gitDir.exists() && !Util.delete(gitDir)){//if the Git directory already exists and couldn't be deleted
 			throw new IOException("Failed to delete previous git installation");//except that the previous installation couldn't be deleted
 		}
 		File zipFile = new File(gitDir, "Git.zip");//store a reference to the zip file containing Git
 		downloadFileFromDatabase(zipFile.getAbsolutePath(), "/ANDAC/Git.zip");//download Git from ANDAC
-		ProcessBuilder unzip = new ProcessBuilder(dir.getAbsolutePath() + "\\bin\\7za920\\7za.exe", "x", "Git.zip", "-y");//create a process for unzipping Git
+		ProcessBuilder unzip = new ProcessBuilder(dir.getAbsolutePath() + "\\res\\7za.exe", "x", "Git.zip", "-y");//create a process for unzipping Git
 		Process process = unzip.directory(gitDir).start();//start the process
 		InputStream inputstream = process.getInputStream();//retrieve the processes input stream
 		int next = inputstream.read();//store the bytes being read off the process input stream
@@ -190,11 +208,11 @@ public class FileManager implements Runnable, Closeable
 	/**Loads in a task class to the node's file environment
 	 * @param className The name of the class to be loaded
 	 * @throws IOException If the class couldn't be loaded*/
-	protected void loadClass(String className) throws IOException
+	public void loadClass(String className) throws IOException
 	{
 		className = className + (className.endsWith(".class")? "" : ".class");//ensure the class has the proper class ending
-		File taskClassFile = new File(rootDir, "bin\\taskClasses\\" + className);//store a reference to the desired class
-		taskClassFile.delete();//delete anything at the class's location
+		File taskClassFile = new File(rootDir, "res\\taskClasses\\" + className);//store a reference to the desired class
+		Util.delete(taskClassFile);//delete anything at the class's location
 		try{//try to load in the requested class file
 			if(databaseClient.getMetadata(serverName + "/taskClasses/" + className) != null){//if the task class is in the database
 				downloadFileFromDatabase(taskClassFile.getAbsolutePath(), serverName + "/taskClasses/" + className);//download the class file from the database
@@ -212,7 +230,7 @@ public class FileManager implements Runnable, Closeable
 	/**Uploads a result file from the server into the ANDAC database, deleting the file after it's been uploaded successfully
 	 * @param result File reference to the result file to be uploaded into the database
 	 * @throws IOException If the upload fails*/
-	protected void uploadResult(File result) throws IOException
+	public void uploadResult(File result) throws IOException
 	{
 		try{//try to upload the result into the master database
 			uploadFileToDatabase(result.getAbsolutePath(), serverName + "/results/" + result.getName());//upload the result file into the ANDAC database
@@ -224,7 +242,8 @@ public class FileManager implements Runnable, Closeable
 	
 	/**Periodically checks the ANDAC tasks folder for this server, ensuring that it stays up to date and processes them*/
 	public void run()
-	{
+	{//TODO write the thread already
+		log.log("Starting file manager thread", true);//log that the file manager thread is being started
 		long lastModified = 0;//stores the timestamp for when the tasks file was last updated
 		File LOCK = new File(rootDir, "LOCKA.txt");//store a reference to the lock file for this file manager
 		try{//try to ensure the LOCK file is usable
@@ -232,7 +251,7 @@ public class FileManager implements Runnable, Closeable
 				
 			}
 		} catch(IOException ioException){//if the LOCK file couldn't be created or accessed successfully
-			
+			//TODO put more log calls everywhere on this
 		}
 		while(keepRunning){//while the file manager should keep running
 			
@@ -242,11 +261,12 @@ public class FileManager implements Runnable, Closeable
 	/**Closes the file manager, releasing any resources and signaling it's threads to stop*/
 	public void close()
 	{
+		log.log("Closing file manager", true);//log that the file manager is being closed
 		keepRunning = false;//set that the file manager should stop running
 	}
 	
 	public static void main(String args[]) throws Exception
 	{
-		FileManager fileManager = FileManager.createServer(null, "Testing2", new File("C:\\Users\\ahenriksen2015\\workspace\\SLA"), "zGw7BngehFAAAAAAAAAAEorYRDKDnxFue0w4cQkTN0EO2iorC-uDLwyQyuZV25SS");
+		FileManager fileManager = FileManager.createServer(null, "Testing2", new File("C:\\Users\\ahenriksen2015\\downloads\\testing"), "zGw7BngehFAAAAAAAAAAEorYRDKDnxFue0w4cQkTN0EO2iorC-uDLwyQyuZV25SS");
 	}
 }

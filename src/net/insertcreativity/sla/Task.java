@@ -18,14 +18,15 @@ public abstract class Task implements java.io.Serializable
 	}
 	
 	/**Carries out the actual computations or functions of the task
+	 * @param Logger 
 	 * @throws Exception if the process fails to complete in some way shape or form, specific implementations should
 	 * further specify the exceptions they generate*/
-	public abstract void process() throws Exception;
+	public abstract void process(Logger logger) throws Exception;
 	
 	/**Used to output or analyze the results after the task has been completed
 	 * @throws Exception if the output fails to complete in some way shape or form, specific implementations should
 	 * further specify the exceptions they generate*/
-	public abstract void handleResults() throws Exception;
+	public abstract void handleResults(Logger logger, stream) throws Exception;
 	
 	/**Compares an object against this task for equality
 	 * @param object The object to compare against this task
