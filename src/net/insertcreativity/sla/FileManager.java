@@ -1,6 +1,7 @@
 
 package net.insertcreativity.sla;
 
+import java.io.Closeable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -23,32 +24,31 @@ import net.insertcreativity.util.Util;
  * necessary files for the node, and ensures that the node and it's files stay up to date with the master
  * repository and SLA database, in addition to providing a means of communication between them and the node
  * and keeping this node synced with the master repository and SLA database*/
-public class FileManager implements Runnable
+public class FileManager implements Runnable, Closeable
 {
-	/**Client used to communicate with the SLA database*/
+	/**Client used to communicate with the master database*/
 	private DbxClient databaseClient;
 	/**Class loader to dynamically load in new task classes*/
 	private URLClassLoader classLoader;
-	/**Reference to the node that this is managing files for*/
-	private final Node master;
 	/**Reference to the root directory that the node is running from*/
 	private final File rootDir;
 	/**The server's name in ANDAC*/
 	private final String serverName;
+	/**Flag for whether the file manager should keep running*/
+	private boolean keepRunning = false;
 	
 	/**Constructs a new file manager
 	 * @param name Unique string identifier for this node
 	 * @param dir Reference to the directory that this node is running in
-	 * @param authCode Authorization code for accessing the SLA database
+	 * @param authCode Authorization code for accessing the master database
 	 * @throws IOException If there's an issue creating the local file environment
-	 * @throws DbxException If there's an issue communicating with the SLA database
-	 * @throws FileLoadException If the SLA key file is malformed or invalid*/
-	private FileManager(Node node, String name, File dir, String authCode) throws IOException, DbxException, FileLoadException
+	 * @throws DbxException If there's an issue communicating with the master database
+	 * @throws FileLoadException If the database key file is malformed or invalid*/
+	private FileManager(String name, File dir, String authCode) throws IOException, DbxException, FileLoadException
 	{
 		rootDir = dir;//store a reference to the root directory for this node
-		master = node;//store a reference to the node that created this file manager
-		serverName = "/ANDAC/Servers/" + name;//store the server's name in ANDAC
-		databaseClient = establishDatabaseConnection(name, authCode);//establish a connection with the SLA database
+		serverName = "/ANDAC/Servers/" + name;//store what the server's name is in ANDAC
+		databaseClient = establishDatabaseConnection(name, authCode);//establish a connection with the master database
 		if(!(new File(dir, "bin\\Git\\git-bash.exe")).canExecute()){//if the Git bash doesn't exist or can't be executed
 			installGit(dir);//install Git from scratch
 		}
@@ -63,23 +63,25 @@ public class FileManager implements Runnable
 	}
 	
 	/**Creates a new file manager for a server by setting up the local file environment and establishing
-	 * connections to the master repository and SLA database
-	 * @param server Reference to the server that this will manage files for
+	 * connections to the master repository and master database
 	 * @param serverName Unique string identifier for this server
 	 * @param serverDir Reference to the directory that the server is running in
-	 * @param authCode Authorization code for accessing the SLA database
+	 * @param authCode Authorization code for accessing the master database
 	 * @throws IOException If there's an issue creating the local file environment
-	 * @throws DbxException If there's an issue communicating with the SLA database
-	 * @throws FileLoadException If the SLA key file is malformed or invalid*/
+	 * @throws DbxException If there's an issue communicating with the master database
+	 * @throws FileLoadException If the database key file is malformed or invalid*/
 	public static FileManager createServer(Server server, String serverName, File serverDir, String authCode) throws IOException, DbxException, FileLoadException
 	{
-		FileManager serverFileManager = new FileManager(server, serverName, serverDir, authCode);//create a new file manager for the server
-		serverName = serverFileManager.serverName;//update the server's name to what it is in ANDAC
+		FileManager serverFileManager = new FileManager(serverName, serverDir, authCode);//create a new file manager for the server
+		serverName = serverFileManager.serverName;//store what the server's name is in ANDAC
 		if(serverFileManager.databaseClient.getMetadata(serverName) == null){//if this server doesn't have a folder in ANDAC
 			serverFileManager.databaseClient.createFolder(serverName);//create a folder for this server in ANDAC
 		}
-		if(serverFileManager.databaseClient.getMetadata(serverName + "/tasks") == null){//if this server doesn't have a task folder in ANDAC
-			serverFileManager.databaseClient.createFolder(serverName + "/tasks");//create a task folder for this server in ANDAC
+		if(serverFileManager.databaseClient.getMetadata(serverName + "/tasks") == null){//if this server doesn't have a tasks folder in ANDAC
+			serverFileManager.databaseClient.createFolder(serverName + "/tasks");//create a tasks folder for this server in ANDAC
+		}
+		if(serverFileManager.databaseClient.getMetadata(serverName + "/results") == null){//if this server doesn't have a results folder in ANDAC
+			serverFileManager.databaseClient.createFolder(serverName + "/results");//create a results folder for this server in ANDAC
 		}
 		File logFile = new File(serverDir, "log.txt");//store a reference to the server's log file
 		if(serverFileManager.databaseClient.getMetadata(serverName + "/log.txt") != null){//if this server already has a log file in ANDAC
@@ -95,28 +97,29 @@ public class FileManager implements Runnable
 			statusFile.createNewFile();//create a new status file for the server
 			serverFileManager.uploadFileToDatabase(statusFile.getAbsolutePath(), serverName + "/status.txt");//upload the status file to ANDAC
 		}
+		serverFileManager.keepRunning = true;//set that the file manager should be running
+		new Thread(serverFileManager).start();//start the file manager thread for this server
 		return serverFileManager;//return the server's file manager
 	}
 	
 	/**Creates a new file manager for a client by setting up a local file environment, establishing a
-	 * connection to the master repository and the SLA database
-	 * @param client Reference to the client that this will manage files for
+	 * connection to the master repository and the master database
 	 * @param clientName Unique string identifier for this client
 	 * @param clientDir Reference to the directory that the client is running in
-	 * @param authCode Authorization code for accessing the SLA database
+	 * @param authCode Authorization code for accessing the master database
 	 * @throws IOException If there's an issue creating the local file environment
-	 * @throws DbxException If there's an issue communicating with the SLA database
-	 * @throws FileLoadException If the SLA key file is malformed or invalid*/
-	public static FileManager createClient(Client client, String clientName, File clientDir, String authCode) throws IOException, DbxException, FileLoadException
+	 * @throws DbxException If there's an issue communicating with the master database
+	 * @throws FileLoadException If the database key file is malformed or invalid*/
+	public static FileManager createClient(String clientName, File clientDir, String authCode) throws IOException, DbxException, FileLoadException
 	{
-		FileManager clientFileManager = new FileManager(client, clientName, clientDir, authCode);//create a new file manager for the client
+		FileManager clientFileManager = new FileManager(clientName, clientDir, authCode);//create a new file manager for the client
 		return clientFileManager;//return the client's file manager
 	}
 	
-	/**Establishes a connection to the SLA database, returning a client that can be used to access it directly
+	/**Establishes a connection to the master database, returning a client that can be used to access it directly
 	 * @param name Unique string identifier for this node
-	 * @param authCode Code passed to the API to obtain authorized access to the SLA database
-	 * @return A client object that can be used to make API calls to the SLA database
+	 * @param authCode Code passed to the API to obtain authorized access to the master database
+	 * @return A client object that can be used to make API calls to the master database
 	 * @throws DbxException If an error occurs in establishing the connection with Dropbox
 	 * @throws FileLoadException If the provided key file is malformed*/
 	private static DbxClient establishDatabaseConnection(String name, String authCode) throws DbxException, FileLoadException
@@ -136,7 +139,7 @@ public class FileManager implements Runnable
 			throw new IOException("Failed to delete previous git installation");//except that the previous installation couldn't be deleted
 		}
 		File zipFile = new File(gitDir, "Git.zip");//store a reference to the zip file containing Git
-		downloadFileFromDatabase(zipFile.getAbsolutePath(), "/SLA/Git.zip");//download Git from the database
+		downloadFileFromDatabase(zipFile.getAbsolutePath(), "/ANDAC/Git.zip");//download Git from ANDAC
 		ProcessBuilder unzip = new ProcessBuilder(dir.getAbsolutePath() + "\\bin\\7za920\\7za.exe", "x", "Git.zip", "-y");//create a process for unzipping Git
 		Process process = unzip.directory(gitDir).start();//start the process
 		InputStream inputstream = process.getInputStream();//retrieve the processes input stream
@@ -152,26 +155,26 @@ public class FileManager implements Runnable
 		zipFile.delete();//attempt to delete the leftover zip file
 	}
 	
-	/**Uploads a file to the SLA database
+	/**Uploads a file to the master database
 	 * @param localPath The location of the file to be uploaded
-	 * @param remotePath The location that the file should be uploaded to in the SLA database
+	 * @param remotePath The location that the file should be uploaded to in the master database
 	 * @return Meta-data from the download process
 	 * @throws IOException If there was an issue reading from the local file
-	 * @throws DbxException If there was an issue uploading the file to the SLA database*/
+	 * @throws DbxException If there was an issue uploading the file to the master database*/
 	private DbxEntry uploadFileToDatabase(String localPath, String remotePath) throws IOException, DbxException
 	{
 		try(InputStream inputStream = new FileInputStream(new File(localPath))){//try to create an input stream for the uploaded file
-			DbxEntry metadata = databaseClient.uploadFile(remotePath, DbxWriteMode.add(), -1, inputStream);//upload the file to the SLA database
+			DbxEntry metadata = databaseClient.uploadFile(remotePath, DbxWriteMode.add(), -1, inputStream);//upload the file to the master database
 			return metadata;//return the download's meta-data
 		}
 	}
 	
-	/**Downloads a file from the SLA database
+	/**Downloads a file from the master database
 	 * @param localPath The location that the file should be downloaded to
-	 * @param remotePath the location of the file inside the SLA database
+	 * @param remotePath the location of the file inside the master database
 	 * @return Meta-data from the download process
 	 * @throws IOException If there was an issue writing to the local file
-	 * @throws DbxException If there was an issue downloading from the SLA database*/
+	 * @throws DbxException If there was an issue downloading from the master database*/
 	private DbxEntry downloadFileFromDatabase(String localPath, String remotePath) throws IOException, DbxException
 	{
 		File localFile = new File(localPath);//store the local file
@@ -179,7 +182,7 @@ public class FileManager implements Runnable
 			throw new IOException("Failed to create parents for " + localFile.getAbsolutePath());//except that the parents couldn't be made
 		}
 		try(OutputStream outputStream = new FileOutputStream(localFile)){//try to create an output stream for the download file
-			DbxEntry metadata = databaseClient.getFile(remotePath, null, outputStream);//download the file from the database
+			DbxEntry metadata = databaseClient.getFile(remotePath, null, outputStream);//download the file from the master database
 			return metadata;//return the download's meta-data
 		}
 	}
@@ -206,13 +209,44 @@ public class FileManager implements Runnable
 		}
 	}
 	
+	/**Uploads a result file from the server into the ANDAC database, deleting the file after it's been uploaded successfully
+	 * @param result File reference to the result file to be uploaded into the database
+	 * @throws IOException If the upload fails*/
+	protected void uploadResult(File result) throws IOException
+	{
+		try{//try to upload the result into the master database
+			uploadFileToDatabase(result.getAbsolutePath(), serverName + "/results/" + result.getName());//upload the result file into the ANDAC database
+		} catch(DbxException dbxException){//if the result couldn't be uploaded into the database
+			throw new IOException("Failed to upload result", dbxException);//except that the upload failed
+		}
+		result.delete();//delete the result file from the local environment
+	}
+	
+	/**Periodically checks the ANDAC tasks folder for this server, ensuring that it stays up to date and processes them*/
 	public void run()
 	{
-		
+		long lastModified = 0;//stores the timestamp for when the tasks file was last updated
+		File LOCK = new File(rootDir, "LOCKA.txt");//store a reference to the lock file for this file manager
+		try{//try to ensure the LOCK file is usable
+			if(!LOCK.exists() && !LOCK.createNewFile()){//if the LOCK file doesn't exist and can't be created
+				
+			}
+		} catch(IOException ioException){//if the LOCK file couldn't be created or accessed successfully
+			
+		}
+		while(keepRunning){//while the file manager should keep running
+			
+		}
+	}
+	
+	/**Closes the file manager, releasing any resources and signaling it's threads to stop*/
+	public void close()
+	{
+		keepRunning = false;//set that the file manager should stop running
 	}
 	
 	public static void main(String args[]) throws Exception
 	{
-		FileManager fileManager = new FileManager("Testing", new File("C:\\Users\\ahenriksen2015\\Desktop\\testing\\"), "zGw7BngehFAAAAAAAAAAEorYRDKDnxFue0w4cQkTN0EO2iorC-uDLwyQyuZV25SS");
+		FileManager fileManager = FileManager.createServer(null, "Testing2", new File("C:\\Users\\ahenriksen2015\\workspace\\SLA"), "zGw7BngehFAAAAAAAAAAEorYRDKDnxFue0w4cQkTN0EO2iorC-uDLwyQyuZV25SS");
 	}
 }
