@@ -266,9 +266,4 @@ public final class FileManager implements Runnable, Closeable
 		log.log("Closing file manager");//log that the file manager is being closed
 		keepRunning = false;//set that the file manager should stop running
 	}
-	
-	public static void main(String args[]) throws Exception
-	{//TODO REMOVEME
-		FileManager.createServer(null, "Testing2", new File("C:\\Users\\ahenriksen2015\\downloads\\testing"), "zGw7BngehFAAAAAAAAAAEorYRDKDnxFue0w4cQkTN0EO2iorC-uDLwyQyuZV25SS");
-	}
 }

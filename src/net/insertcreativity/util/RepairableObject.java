@@ -12,7 +12,7 @@ public class RepairableObject<T>
 	/**Reference to the object's constructor*/
 	private final Constructor<T> constructor;
 	/**Reference to the underlying output-stream*/
-	protected T object;
+	private T object;
 	
 	/**Creates a new reparable object, by invoking the object's constructor with the provided arguments
 	 * @param type The class type of the object that this will wrap
@@ -38,5 +38,12 @@ public class RepairableObject<T>
 	public void repair() throws ReflectiveOperationException, Exception
 	{
 		object = constructor.newInstance(parameters);//reconstruct the underlying object
+	}
+	
+	/**Returns a reference to the underlying object
+	 * @return The underlying object*/
+	public T get()
+	{
+		return object;//return the underlying object
 	}
 }

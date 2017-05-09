@@ -3,101 +3,160 @@ package net.insertcreativity.util;
 
 import java.io.IOException;
 import java.io.OutputStream;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.Iterator;
 
-/**Class that encapsulates all the logging capabilities of the server*/
-public class Logger
+/**Class that encapsulates logging capabilities, which has a list of subscriber output-streams, which the
+ * log forwards all it's data to*/
+public class Logger extends OutputStream
 {
-	/**Lock for ensuring synchronous access to the logs*/
-	private final Object LOG_LOCK = new Object();
+	/**Lock that users can acquire to ensure synchronous writing to the log in case multiple
+	 * threads need access to the same one*/
+	public final Object LOG_LOCK = new Object();
+	/**Encoding that the logger should output it's characters with*/
+	public final Charset encoding;
+	/**Buffer for storing data written to the log before outputting it*/
+	private final byte[] logBuffer;
+	/**Index for storing the current location in the buffer*/
+	private int bufferIndex = 0;
+	/**Lock for ensuring synchronous access to the log outputs*/
+	private final Object OUT_LOCK = new Object();
 	/**Map containing all the output-streams registered to this logger, keyed by their names*/
 	private final HashMap<String, OutputStream> outputs  = new HashMap<String, OutputStream>();
+	/**Map for temporarily storing exceptions thrown by subscriber output-streams, to avoid recursively
+	 * catching exceptions in case this logger has been linked to System.err*/
+	private final HashMap<String, Exception> exceptions = new HashMap<String, Exception>();
 	
-	/**Adds an output stream into the streams that this log will output to
+	/**Create a new logger with no outputs that uses UTF-8 encoding and has a buffer size of 8192*/
+	public Logger()
+	{
+		logBuffer = new byte[8192];//allocate 8192 bytes to the log buffer
+		encoding = StandardCharsets.UTF_8;//encode characters with the UTF8 standard
+	}
+	
+	/**Create a new logger with no outputs that uses UTF-8 encoding
+	 * @param bufferSize How many bytes long the log's buffer should be*/
+	public Logger(int bufferSize)
+	{
+		logBuffer = new byte[bufferSize];//allocate the specified number of bytes to the log buffer
+		encoding = StandardCharsets.UTF_8;//encode characters with the UTF8 standard
+	}
+	
+	/**Create a new logger with no outputs and a buffer size of 8192
+	 * @param charset Charset that the logger should use to encode it's characters*/
+	public Logger(Charset charset)
+	{
+		logBuffer = new byte[8192];//allocate 8192 bytes to the log buffer
+		encoding = charset;//encode characters with the specified standard
+	}
+	
+	/**Create a new logger with no outputs and the specified settings
+	 * @param bufferSize How many bytes long the log's buffer should be
+	 * @param charset Charset that the logger should use to encode it's characters*/
+	public Logger(int bufferSize, Charset charset)
+	{
+		logBuffer = new byte[bufferSize];//allocate the specified number of bytes to the log buffer
+		encoding = charset;//encode characters with the specified standard
+	}
+	
+	/**Subscribe an output-stream to this log so that it'll receive the log's output
 	 * @param name String identifier for the output-stream
-	 * @param output A supplier that yields an output-stream when called*/
+	 * @param output The output-stream to subscribe*/
 	public void addOutput(String name, OutputStream output)
 	{
-		synchronized(LOG_LOCK){//sync outputs
+		synchronized(OUT_LOCK){//sync outputs
 			outputs.put(name, output);//add the provided output and it's name into the outputs map
 		}
 	}
 	
-	/**Removes an output stream from the list of log outputs, and returns it, unclosed
-	 * @param name String identifier for the output-stream to be removed
-	 * @return the output-stream that was removed, or null if there was no stream with the specified name*/
+	/**Unsubscribes an output-stream from this log
+	 * @param name The identifier for the output-stream to be unsubscribed
+	 * @return The output-stream that was removed, or null if there was no output with the specified name*/
 	public OutputStream removeOutput(String name)
 	{
-		synchronized(LOG_LOCK){//sync outputs
+		synchronized(OUT_LOCK){//sync outputs
 			return outputs.remove(name);//return the result of removing the output stream from the outputs map
 		}
 	}
 	
 	/**Logs a string with a date-stamp
 	 * @param s The string to be logged*/
-	public final void log(String s)
+	public void log(String s)
 	{
-		logRaw("<" + System.currentTimeMillis() + ">" + s);//log the string with a date-stamp
+		write(("<" + System.currentTimeMillis() + ">" + s).getBytes(encoding));//write the string with a date-stamp
 	}
 	
-	/**Logs a throwable, first printing the message to the user with a date-stamp, and then logging the throwable's
-	 * stack trace elements
-	 * @param throwable The throwable to be logged*/
-	public final void log(Throwable throwable)
+	/**Writes a single byte into the log
+	 * @param b An integer whose first 8 bits will be written as a byte to the log*/
+	public void write(int b)
 	{
-		log(throwable.toString() + '\n');//log the exception's message with a date-stamp
-		logRaw(getThrowableString(throwable));//log the throwable's stack trace
+		logBuffer[bufferIndex++] = (byte)b;//write the byte into the log buffer
+		if(bufferIndex == logBuffer.length){//if the log buffer is full
+			flush();//flush the logger
+		}
 	}
 	
-	/**Constructs a string representation of a throwable's full stack trace
-	 * @param throwable The throwable who's stack trace should be retrieved
-	 * @return A string containing the full stack trace and message of the throwable*/
-	private final String getThrowableString(Throwable throwable)
+	/**Writes an array of bytes into the log
+	 * @param b An array of bytes to write into the log*/
+	public void write(byte[] b)
 	{
-		Throwable cause = throwable.getCause();//get the cause of the throwable
-		String causeString = "";//create a string for storing the cause's error message
-		if(cause != null){//if the original throwable did have a cause
-			causeString = "Caused by:" + cause.toString() + '\n' + getThrowableString(cause);//store the cause's string
+		int spaceLeft = logBuffer.length - bufferIndex;//calculate how many bytes are left in the log buffer
+		if(spaceLeft <= b.length){//if there isn't enough space in the log buffer
+			System.arraycopy(b, 0, logBuffer, bufferIndex, spaceLeft);//copy in as many bytes as possible to the log buffer
+			flush();//flush the log buffer
+			System.arraycopy(b, spaceLeft, logBuffer, bufferIndex, (b.length - spaceLeft));//copy in the remaining bytes
+		} else{//if there is sufficient space in the log buffer
+			System.arraycopy(b, 0, logBuffer, bufferIndex, b.length);//copy the bytes into the log buffer
 		}
-		int total = causeString.length();//create a variable for storing the total number of characters
-		StackTraceElement[] stackTraceElements = throwable.getStackTrace();//get all the elements of the stack trace
-		String[] stackElementStrings = new String[stackTraceElements.length];//create an array for storing all the stack trace strings
-		for(int counter = 0; counter < stackTraceElements.length; counter++){//iterate through all the stack trace elements
-			stackElementStrings[counter] = "\tat " + stackTraceElements[counter].toString() + '\n';//store the stack element's string value
-			total += stackElementStrings[counter].length();//add the number of chars in the string to the total
-		}
-		char[] characters = new char[total];//create a char array for holding all the string's data
-		int offsetValue = 0;//create a variable for keeping track of the current offset in the character array
-		for(String stackElementString : stackElementStrings){//iterate through all the stack element's strings
-			stackElementString.getChars(0, stackElementString.length(), characters, offsetValue);//copy the stack element's string into the array
-			offsetValue += stackElementString.length();//add the stack trace's length to the total character count
-		}
-		causeString.getChars(0, causeString.length(), characters, offsetValue);//copy in the cause
-		return new String(characters);//return a new string made of the character array
 	}
 	
-	/**Logs a string exactly as it's given
-	 * @param s The string to log*/
-	public void logRaw(String s)
+	/**Writes a specific section of a byte array into the log
+	 * @param b An array of bytes to write into the log
+	 * @param off The starting offset to write bytes from b
+	 * @param len How many bytes should be written from b*/
+	public void write(byte[] b, int off, int len)
 	{
-		synchronized(LOG_LOCK){//sync outputs
-			for(Iterator<HashMap.Entry<String, OutputStream>> iterator = outputs.entrySet().iterator(); iterator.hasNext();){//iterate through all the outputs
-				HashMap.Entry<String, OutputStream> entry = iterator.next();//retrieve the next output entry
-				try{//try to write the string to the output stream
-					entry.getValue().write(s.getBytes(StandardCharsets.UTF_8));//encode the string as bytes and write them to the output
-				} catch(IOException ioException){//if the string couldn't be written successfully
-					iterator.remove();//remove the output from the output map
-					log(entry.getKey() + " was removed from the logger due to a malfunction");//log that the output was removed for malfunctioning
-					log(ioException);//log the exception thrown from the output
-					try{//try to close the output before discarding it
-						entry.getValue().close();//close the output
-					} catch(Exception exception){//if the output couldn't be closed
-						log("Failed to close output: " + entry.getKey());//log that the output couldn't be closed properly
-					}
+		int spaceLeft = logBuffer.length - bufferIndex;//calculate how many bytes are left in the log buffer
+		if(spaceLeft <= len){//if there isn't enough space in the log buffer
+			System.arraycopy(b, off, logBuffer, bufferIndex, spaceLeft);//copy in as many bytes as possible to the log buffer
+			flush();//flush the log buffer
+			System.arraycopy(b, off + spaceLeft, logBuffer, bufferIndex, (len - spaceLeft));//copy in the remaining bytes
+		} else{//if there is sufficient space in the log buffer
+			System.arraycopy(b, off, logBuffer, bufferIndex, len);//copy the specified bytes into the log buffer
+		}
+	}
+
+	/**Flushes the log buffer, writing all it's data into the subscriber outputs before flushing them*/
+	public void flush()
+	{
+		synchronized(OUT_LOCK){//sync outputs
+			for(OutputStream output : outputs.values()){//iterate through all the outputs subscribed to this logger
+				try{//try to log to the output-stream
+					output.write(logBuffer);//write the entire log buffer to the output-stream
+					output.flush();//flush the output-stream
+				} catch(IOException ioException){
+					//TODO
 				}
 			}
 		}
+		bufferIndex = 0;//reset the log buffer
+	}
+	
+	/**Closes the logger and any subscribed streams*/
+	public void close()
+	{
+		synchronized(OUT_LOCK){//sync outputs
+			for(OutputStream output : outputs.values()){//iterate through all the outputs subscribed to this logger
+				try{//try to close the current output-stream
+					output.flush();//flush the output-stream
+					output.close();//close the output-stream
+				} catch(IOException ioException){
+					//TODO
+				}
+			}
+			outputs.clear();//remove all the subscribed output-streams
+		}
+		bufferIndex = 0;//reset the buffer index
 	}
 }
