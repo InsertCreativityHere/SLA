@@ -24,10 +24,7 @@ public class Logger extends OutputStream
 	private final Object OUT_LOCK = new Object();
 	/**Map containing all the output-streams registered to this logger, keyed by their names*/
 	private final HashMap<String, OutputStream> outputs  = new HashMap<String, OutputStream>();
-	/**Map for temporarily storing exceptions thrown by subscriber output-streams, to avoid recursively
-	 * catching exceptions in case this logger has been linked to System.err*/
-	private final HashMap<String, Exception> exceptions = new HashMap<String, Exception>();
-	
+
 	/**Create a new logger with no outputs that uses UTF-8 encoding and has a buffer size of 8192*/
 	public Logger()
 	{
@@ -84,7 +81,7 @@ public class Logger extends OutputStream
 	 * @param s The string to be logged*/
 	public void log(String s)
 	{
-		write(("<" + System.currentTimeMillis() + ">" + s).getBytes(encoding));//write the string with a date-stamp
+		write(("<" + System.currentTimeMillis() + ">" + s + "\n").getBytes(encoding));//write the string with a date-stamp
 	}
 	
 	/**Writes a single byte into the log
@@ -133,7 +130,7 @@ public class Logger extends OutputStream
 		synchronized(OUT_LOCK){//sync outputs
 			for(OutputStream output : outputs.values()){//iterate through all the outputs subscribed to this logger
 				try{//try to log to the output-stream
-					output.write(logBuffer);//write the entire log buffer to the output-stream
+					output.write(logBuffer, 0, bufferIndex);//write the log buffer to the output-stream
 					output.flush();//flush the output-stream
 				} catch(IOException ioException){
 					//TODO
@@ -149,6 +146,7 @@ public class Logger extends OutputStream
 		synchronized(OUT_LOCK){//sync outputs
 			for(OutputStream output : outputs.values()){//iterate through all the outputs subscribed to this logger
 				try{//try to close the current output-stream
+					output.write(logBuffer, 0, bufferIndex);//write the log buffer to the output-stream
 					output.flush();//flush the output-stream
 					output.close();//close the output-stream
 				} catch(IOException ioException){
