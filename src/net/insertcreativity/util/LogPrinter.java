@@ -10,7 +10,6 @@ import java.nio.charset.StandardCharsets;
 /**Extension of LogWriter with the capabilities of a PrintStream, and synchronous logging*/
 public class LogPrinter extends PrintStream
 {
-	
 	/**Reference to the underlying log writer*/
 	private final LogWriter log;
 	
@@ -79,9 +78,9 @@ public class LogPrinter extends PrintStream
 	 * @param s The string to be logged*/
 	public void log(String s)
 	{
-		synchronized(this){//synchronize on the log printer
+		synchronized(this){//lock this
 			log.log(s);//log the string to the underling log writer
-		}
+		}//release this
 	}
 	
 	/**Captures the system's output stream, routing all it's output through the log printer first.

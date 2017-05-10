@@ -60,9 +60,9 @@ public class LogWriter extends OutputStream
 	 * @return The output-stream previously subscribed under the provided name, or null if the name is new*/
 	public OutputStream addOutput(String name, OutputStream output)
 	{
-		synchronized(OUT_LOCK){//sync outputs
+		synchronized(OUT_LOCK){//lock outputs
 			return outputs.put(name, output);//add the provided output and it's name into the outputs map
-		}
+		}//release outputs
 	}
 	
 	/**Unsubscribes an output-stream from this log
@@ -70,9 +70,9 @@ public class LogWriter extends OutputStream
 	 * @return The output-stream that was removed, or null if there was no output with the specified name*/
 	public OutputStream removeOutput(String name)
 	{
-		synchronized(OUT_LOCK){//sync outputs
+		synchronized(OUT_LOCK){//lock outputs
 			return outputs.remove(name);//return the result of removing the output stream from the outputs map
-		}
+		}//release
 	}
 	
 	/**Logs a string with a date-stamp
@@ -125,7 +125,7 @@ public class LogWriter extends OutputStream
 	/**Flushes the log buffer, writing all it's data into the subscriber outputs before flushing them*/
 	public void flush()
 	{
-		synchronized(OUT_LOCK){//sync outputs
+		synchronized(OUT_LOCK){//lock outputs
 			for(OutputStream output : outputs.values()){//iterate through all the outputs subscribed to this log
 				try{//try to log to the output-stream
 					output.write(logBuffer, 0, bufferIndex);//write the log buffer to the output-stream
@@ -136,13 +136,13 @@ public class LogWriter extends OutputStream
 					bufferIndex = 0;//reset the log buffer
 				}
 			}
-		}
+		}//release outputs
 	}
 	
 	/**Closes the log and any subscribed streams*/
 	public void close()
 	{
-		synchronized(OUT_LOCK){//sync outputs
+		synchronized(OUT_LOCK){//lock outputs
 			for(OutputStream output : outputs.values()){//iterate through all the outputs subscribed to this log
 				try{//try to close the current output-stream
 					output.write(logBuffer, 0, bufferIndex);//write the log buffer to the output-stream
@@ -155,6 +155,6 @@ public class LogWriter extends OutputStream
 					outputs.clear();//remove all the subscribed output-streams
 				}
 			}
-		}
+		}//release outputs
 	}
 }
