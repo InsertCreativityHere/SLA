@@ -18,7 +18,7 @@ import com.dropbox.core.DbxHost;
 import com.dropbox.core.DbxRequestConfig;
 import com.dropbox.core.DbxWriteMode;
 import com.dropbox.core.json.JsonReader.FileLoadException;
-import net.insertcreativity.util.Logger;
+import net.insertcreativity.util.LogPrinter;
 import net.insertcreativity.util.Util;
 
 /**Class responsible for encapsulating all the file management for this node; initially creates all the
@@ -28,7 +28,7 @@ import net.insertcreativity.util.Util;
 public final class FileManager
 {
 	/**Reference to the logger that the file manager outputs to*/
-	private final Logger log;
+	private final LogPrinter log;
 	/**Client used to communicate with the master database*/
 	private DbxClient databaseClient;
 	/**Class loader to dynamically load in new task classes*/
@@ -48,7 +48,7 @@ public final class FileManager
 	 * @throws IOException If there's an issue creating the local file environment
 	 * @throws DbxException If there's an issue communicating with the master database
 	 * @throws FileLoadException If the database key file is malformed or invalid*/
-	private FileManager(Logger logger, String name, File dir, String authCode) throws IOException, DbxException, FileLoadException
+	private FileManager(LogPrinter logger, String name, File dir, String authCode) throws IOException, DbxException, FileLoadException
 	{
 		log = logger;//store a reference to the logger this file manager should use
 		rootDir = dir;//store a reference to the root directory for this node
@@ -95,7 +95,7 @@ public final class FileManager
 	 * @throws IOException If there's an issue creating the local file environment
 	 * @throws DbxException If there's an issue communicating with the master database
 	 * @throws FileLoadException If the database key file is malformed or invalid*/
-	public static FileManager createServer(Logger logger, String serverName, File serverDir, String authCode) throws IOException, DbxException, FileLoadException
+	public static FileManager createServer(LogPrinter logger, String serverName, File serverDir, String authCode) throws IOException, DbxException, FileLoadException
 	{
 		logger.log("Initializing new server file manager...");//log the initialization of a new server file manager
 		FileManager serverFileManager = new FileManager(logger, serverName, serverDir, authCode);//create a new file manager for the server
@@ -158,7 +158,7 @@ public final class FileManager
 	 * @throws IOException If there's an issue creating the local file environment
 	 * @throws DbxException If there's an issue communicating with the master database
 	 * @throws FileLoadException If the database key file is malformed or invalid*/
-	public static FileManager createClient(Logger logger, String serverName, File clientDir, String authCode) throws IOException, DbxException, FileLoadException
+	public static FileManager createClient(LogPrinter logger, String serverName, File clientDir, String authCode) throws IOException, DbxException, FileLoadException
 	{
 		logger.log("Initializing new client file manager");//log the initialization of a new client file manager
 		FileManager clientFileManager = new FileManager(logger, serverName, clientDir, authCode);//create a new file manager for the client

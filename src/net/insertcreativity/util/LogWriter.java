@@ -9,12 +9,9 @@ import java.util.HashMap;
 
 /**Class that encapsulates logging capabilities, which has a list of subscriber output-streams, which the
  * log forwards all it's data to*/
-public class Logger extends OutputStream
+public class LogWriter extends OutputStream
 {
-	/**Lock that users can acquire to ensure synchronous writing to the log in case multiple
-	 * threads need access to the same one*/
-	public final Object LOG_LOCK = new Object();
-	/**Encoding that the logger should output it's characters with*/
+	/**Encoding that the log should output it's characters with*/
 	public final Charset encoding;
 	/**Buffer for storing data written to the log before outputting it*/
 	private final byte[] logBuffer;
@@ -22,36 +19,36 @@ public class Logger extends OutputStream
 	private int bufferIndex = 0;
 	/**Lock for ensuring synchronous access to the log outputs*/
 	private final Object OUT_LOCK = new Object();
-	/**Map containing all the output-streams registered to this logger, keyed by their names*/
+	/**Map containing all the output-streams registered to this log, keyed by their names*/
 	private final HashMap<String, OutputStream> outputs  = new HashMap<String, OutputStream>();
 
-	/**Create a new logger with no outputs that uses UTF-8 encoding and has a buffer size of 8192*/
-	public Logger()
+	/**Create a new log with no outputs that uses UTF-8 encoding and has a buffer size of 8192*/
+	public LogWriter()
 	{
 		logBuffer = new byte[8192];//allocate 8192 bytes to the log buffer
 		encoding = StandardCharsets.UTF_8;//encode characters with the UTF8 standard
 	}
 	
-	/**Create a new logger with no outputs that uses UTF-8 encoding
+	/**Create a new log with no outputs that uses UTF-8 encoding
 	 * @param bufferSize How many bytes long the log's buffer should be*/
-	public Logger(int bufferSize)
+	public LogWriter(int bufferSize)
 	{
 		logBuffer = new byte[bufferSize];//allocate the specified number of bytes to the log buffer
 		encoding = StandardCharsets.UTF_8;//encode characters with the UTF8 standard
 	}
 	
-	/**Create a new logger with no outputs and a buffer size of 8192
-	 * @param charset Charset that the logger should use to encode it's characters*/
-	public Logger(Charset charset)
+	/**Create a new log with no outputs and a buffer size of 8192
+	 * @param charset Charset that the log should use to encode it's characters*/
+	public LogWriter(Charset charset)
 	{
 		logBuffer = new byte[8192];//allocate 8192 bytes to the log buffer
 		encoding = charset;//encode characters with the specified standard
 	}
 	
-	/**Create a new logger with no outputs and the specified settings
+	/**Create a new log with no outputs and the specified settings
 	 * @param bufferSize How many bytes long the log's buffer should be
-	 * @param charset Charset that the logger should use to encode it's characters*/
-	public Logger(int bufferSize, Charset charset)
+	 * @param charset Charset that the log should use to encode it's characters*/
+	public LogWriter(int bufferSize, Charset charset)
 	{
 		logBuffer = new byte[bufferSize];//allocate the specified number of bytes to the log buffer
 		encoding = charset;//encode characters with the specified standard
@@ -59,11 +56,12 @@ public class Logger extends OutputStream
 	
 	/**Subscribe an output-stream to this log so that it'll receive the log's output
 	 * @param name String identifier for the output-stream
-	 * @param output The output-stream to subscribe*/
-	public void addOutput(String name, OutputStream output)
+	 * @param output The output-stream to subscribe
+	 * @return The output-stream previously subscribed under the provided name, or null if the name is new*/
+	public OutputStream addOutput(String name, OutputStream output)
 	{
 		synchronized(OUT_LOCK){//sync outputs
-			outputs.put(name, output);//add the provided output and it's name into the outputs map
+			return outputs.put(name, output);//add the provided output and it's name into the outputs map
 		}
 	}
 	
@@ -90,7 +88,7 @@ public class Logger extends OutputStream
 	{
 		logBuffer[bufferIndex++] = (byte)b;//write the byte into the log buffer
 		if(bufferIndex == logBuffer.length){//if the log buffer is full
-			flush();//flush the logger
+			flush();//flush the log
 		}
 	}
 	
@@ -128,33 +126,35 @@ public class Logger extends OutputStream
 	public void flush()
 	{
 		synchronized(OUT_LOCK){//sync outputs
-			for(OutputStream output : outputs.values()){//iterate through all the outputs subscribed to this logger
+			for(OutputStream output : outputs.values()){//iterate through all the outputs subscribed to this log
 				try{//try to log to the output-stream
 					output.write(logBuffer, 0, bufferIndex);//write the log buffer to the output-stream
 					output.flush();//flush the output-stream
 				} catch(IOException ioException){
 					//TODO
+				} finally{
+					bufferIndex = 0;//reset the log buffer
 				}
 			}
 		}
-		bufferIndex = 0;//reset the log buffer
 	}
 	
-	/**Closes the logger and any subscribed streams*/
+	/**Closes the log and any subscribed streams*/
 	public void close()
 	{
 		synchronized(OUT_LOCK){//sync outputs
-			for(OutputStream output : outputs.values()){//iterate through all the outputs subscribed to this logger
+			for(OutputStream output : outputs.values()){//iterate through all the outputs subscribed to this log
 				try{//try to close the current output-stream
 					output.write(logBuffer, 0, bufferIndex);//write the log buffer to the output-stream
 					output.flush();//flush the output-stream
 					output.close();//close the output-stream
 				} catch(IOException ioException){
 					//TODO
+				} finally{
+					bufferIndex = 0;//reset the buffer index
+					outputs.clear();//remove all the subscribed output-streams
 				}
 			}
-			outputs.clear();//remove all the subscribed output-streams
 		}
-		bufferIndex = 0;//reset the buffer index
 	}
 }
