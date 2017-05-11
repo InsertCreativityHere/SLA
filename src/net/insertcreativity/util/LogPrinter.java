@@ -20,6 +20,14 @@ public class LogPrinter extends PrintStream
 		this(makeLogWriter(8192, StandardCharsets.UTF_8), true);//make the underlying log writer and pass it to the underlying print stream
 	}
 	
+	/**Create a new log printer that uses UTF-8 encoding and has a buffer size of 8192
+	 * @param autoFlush Flag for whether the log should flush whenever an array or newline is written
+	 * @throws UnsupportedEncodingException If UTF_8 isn't supported*/
+	public LogPrinter(boolean autoFlush) throws UnsupportedEncodingException
+	{
+		this(makeLogWriter(8192, StandardCharsets.UTF_8), autoFlush);//make the underlying log writer and pass it to the underlying print stream
+	}
+	
 	/**Create a new log printer that uses UTF-8 encoding
 	 * @param bufferSize How many bytes long the log's buffer should be
 	 * @param autoFlush Flag for whether the log should flush whenever an array or newline is written

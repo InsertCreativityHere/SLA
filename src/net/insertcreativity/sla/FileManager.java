@@ -80,7 +80,7 @@ public final class FileManager
 			log.log("Failed to locate task class directory");//log that the task class directory couldn't be located
 			Util.delete(taskClassesDir);//delete anything that might be at it's location
 			if(!taskClassesDir.mkdirs()){//if the task classes directory couldn't be created
-				throw new IOException("Failed to create the task classes directory");//except that the task class directory couldn'y be made
+				throw new IOException("Failed to create the task classes directory");//except that the task class directory couldn't be created
 			}
 			log.log("Successfully created task class directory");//log the successful creation of a new task class directory
 		}
@@ -95,57 +95,66 @@ public final class FileManager
 	 * @throws IOException If there's an issue creating the local file environment
 	 * @throws DbxException If there's an issue communicating with the master database
 	 * @throws FileLoadException If the database key file is malformed or invalid*/
-	public static FileManager createServer(LogPrinter logger, String serverName, File serverDir, String authCode) throws IOException, DbxException, FileLoadException
+	public static FileManager createServer(LogPrinter log, String serverName, File serverDir, String authCode) throws IOException, DbxException, FileLoadException
 	{
-		logger.log("Initializing new server file manager...");//log the initialization of a new server file manager
-		FileManager serverFileManager = new FileManager(logger, serverName, serverDir, authCode);//create a new file manager for the server
+		log.log("Initializing new server file manager...");//log the initialization of a new server file manager
+		FileManager serverFileManager = new FileManager(log, serverName, serverDir, authCode);//create a new file manager for the server
 		serverName = serverFileManager.serverName;//store what the server's name is in ANDAC
 		if(serverFileManager.databaseClient.getMetadata(serverName) == null){//if this server doesn't have a folder in ANDAC
 			serverFileManager.databaseClient.createFolder(serverName);//create a folder for this server in ANDAC
-			logger.log("Successfully created root directory for " + serverName);//log the successful creation of a new root directory
+			log.log("Successfully created root directory for " + serverName);//log the successful creation of a new root directory
+		}
+		File resultsDir = new File(serverDir + "\\results");//store a reference to the results directory
+		if(!resultsDir.isDirectory()){//if there is no valid results directory
+			log.log("Failed to locate results directory");//log that the results directory couldn't be located
+			Util.delete(resultsDir);//delete anything that might be at it's location
+			if(!resultsDir.mkdirs()){//if the results directory couldn't be created
+				throw new IOException("Failed to create the results directory");//except that the results directory couldn't be created
+			}
+			log.log("Successfully created results directory");//log the successful creation of a new results directory
 		}
 		if(serverFileManager.databaseClient.getMetadata(serverName + "/results") == null){//if this server doesn't have a results folder in ANDAC
 			serverFileManager.databaseClient.createFolder(serverName + "/results");//create a results folder for this server in ANDAC
-			logger.log("Successfully created a new results directory");//log the successful creation of a new results directory
+			log.log("Successfully created a new results directory");//log the successful creation of a new results directory
 		}
 		if(serverFileManager.databaseClient.getMetadata(serverName + "/tasks.txt") == null){//if this server has no task file in ANDAC
-			logger.log("Failed to locate tasks.txt");//log that the task file couldn't be found
+			log.log("Failed to locate tasks.txt");//log that the task file couldn't be found
 			File taskFile = new File(serverDir, "tasks.txt");//store a reference to the server's task file
 			taskFile.createNewFile();//create the task file locally
 			serverFileManager.uploadFileToDatabase(taskFile.getAbsolutePath(), serverName + "/tasks.txt");//upload the task file to ANDAC
 			taskFile.delete();//delete the local copy of the task file
-			logger.log("Successfully created tasks.txt");//log that the task file was created successfully
+			log.log("Successfully created tasks.txt");//log that the task file was created successfully
 		}
 		File logFile = new File(serverDir, "log.txt");//store a reference to the server's log file
 		if(serverFileManager.databaseClient.getMetadata(serverName + "/log.txt") != null){//if this server already has a log file in ANDAC
 			serverFileManager.downloadFileFromDatabase(logFile.getAbsolutePath(), serverName + "/log.txt");//download the log file
-			logger.log("Successfully loaded log.txt");//log that the log file was downloaded successfully
+			log.log("Successfully loaded log.txt");//log that the log file was downloaded successfully
 		} else{//if there is no log file for this server in ANDAC
-			logger.log("Failed to locate log.txt");//log that the log file couldn't be found
+			log.log("Failed to locate log.txt");//log that the log file couldn't be found
 			logFile.createNewFile();//create a new log file for the server
 			serverFileManager.uploadFileToDatabase(logFile.getAbsolutePath(), serverName + "/log.txt");//upload the log file to ANDAC
-			logger.log("Successfully created log.txt");//log the successful creation of a new log file
+			log.log("Successfully created log.txt");//log the successful creation of a new log file
 		}
 		File statusFile = new File(serverDir, "status.txt");//store a reference to the server's status file
 		if(serverFileManager.databaseClient.getMetadata(serverName + "/status.txt") != null){//if this server already has a status file in ANDAC
 			serverFileManager.downloadFileFromDatabase(statusFile.getAbsolutePath(), serverName + "/status.txt");//download the status file
-			logger.log("Successfully loaded status.txt");//log that the status file was downloaded successfully
+			log.log("Successfully loaded status.txt");//log that the status file was downloaded successfully
 		} else{//if there is no status file for this server in ANDAC
-			logger.log("Failed to locate status.txt...");//log that the status file couldn't be found
+			log.log("Failed to locate status.txt...");//log that the status file couldn't be found
 			statusFile.createNewFile();//create a new status file for the server
 			serverFileManager.uploadFileToDatabase(statusFile.getAbsolutePath(), serverName + "/status.txt");//upload the status file to ANDAC
-			logger.log("Successfully created status.txt");//log the successful creation of a new status file
+			log.log("Successfully created status.txt");//log the successful creation of a new status file
 		}
 		File lockFile = new File(serverDir, "L.lock");//store a reference to the lock file for this server
 		if(!lockFile.canRead()){//if the lock file is unreadable
-			logger.log("Failed to locate L.lock");//log that the lock file couldn't be found
+			log.log("Failed to locate L.lock");//log that the lock file couldn't be found
 			if(lockFile.createNewFile()){//if the lock file was successfully created
-				logger.log("Successfully created L.lock");//log that the lock file was created successfully
+				log.log("Successfully created L.lock");//log that the lock file was created successfully
 			} else{//if the lock file couldn't be successfully created
 				throw new IOException("Failed to create lock file: L.lock");//except that the lock file couldn't be created
 			}
 		}
-		logger.log("Successfully created new server file manager on " + serverDir.getAbsolutePath());//log the successful creation of a new server file manager
+		log.log("Successfully created new server file manager on " + serverDir.getAbsolutePath());//log the successful creation of a new server file manager
 		return serverFileManager;//return the server's file manager
 	}
 	
@@ -291,6 +300,18 @@ public final class FileManager
 		log.log("Upload Complete");//log that the upload completed successfully
 	}
 	
+	/**Uploads a task's results into the ANDAC database
+	 * @param task The task who's results should be uploaded
+	 * @throws IOException If the upload fails*/
+	public void uploadResult(ResultTask task) throws IOException
+	{
+		File resultFile = new File(rootDir + "\\results\\" + task.ID + ".dat");//store a reference to the result file for this task
+		try(FileOutputStream fileOutputStream = new FileOutputStream(resultFile)){//try to open an output stream on the result file
+			fileOutputStream.write(task.getResults());//write all the result bytes into the result file's output stream
+		}
+		uploadResult(resultFile);//upload the result file
+	}
+	
 	/**Checks this server's task list in ANDAC, downloading a copy of all the tasks left, before clearing the list
 	 * @return A list containing all of the tasks left for the server in the ANDAC*/
 	public ArrayList<String> loadTasks()
@@ -306,4 +327,4 @@ public final class FileManager
 		}
 		return tasks;//return the list of tasks
 	}
-}
+}//TODO maybe make this self-repairing as well?

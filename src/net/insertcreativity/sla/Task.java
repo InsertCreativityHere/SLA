@@ -1,43 +1,36 @@
 
 package net.insertcreativity.sla;
 
-import net.insertcreativity.util.Logger;
+import java.io.OutputStream;
 
 /**Class that all tasks the ANDAC executes extends from, carrying with it the basic methods needed for
  * handling the computation of data, and outputting of results.*/
 public abstract class Task implements java.io.Serializable
 {
-	/**The serial ID to ensure proper serialization of the class over network transfers*/
-	private static final long serialVersionUID = 4108689577120646453L;
-	/**Unique string identifier for this specific task*/
+	/**Serial ID for serializing this task across networks*/
+	private static final long serialVersionUID = -8932153562286540678L;
+	/**Unique string identifier for this specified task*/
 	public final String ID;
 	
-	/**Creates a new process with the specified ID and provides it with data
-	 * @param identifier The identification string to assign this process*/
+	/**Creates a new task with the specified ID*/
 	public Task(String identifier)
 	{
-		ID = identifier;//store this tasks identifier
+		ID = identifier;//set this tasks ID
 	}
 	
-	/**Carries out the actual computations or functions of the task
-	 * @param Logger 
-	 * @throws Exception if the process fails to complete in some way shape or form, specific implementations should
-	 * further specify the exceptions they generate*/
-	public abstract void process(Logger logger) throws Exception;
-	
-	/**Used to output or analyze the results after the task has been completed
-	 * @throws Exception if the output fails to complete in some way shape or form, specific implementations should
-	 * further specify the exceptions they generate*/
-	public abstract void handleResults(Logger logger, stream) throws Exception;
+	/**This method should encapsulate the actual work or functionality of the task, this is what's called by the worker threads
+	 * @param OutputStream  An output-stream that the task can use to log it's activity to
+	 * @throws Exception If the task fails to complete properly*/
+	public abstract void process(OutputStream logStream) throws Exception;
 	
 	/**Compares an object against this task for equality
 	 * @param object The object to compare against this task
 	 * @return True, only if the object is a task with the same ID as this one*/
-	public boolean equals(Object object)
+	public final boolean equals(Object object)
 	{
-		if(!(object instanceof Task) && ((Task)object).ID.equals(ID)){//if they are both tasks with the same ID
-			return true;//return that they are the same
+		if((object instanceof Task) && ((Task)object).ID.equals(ID)){//if they are both tasks and have the same ID
+			return true;//return that they are equal
 		}
-		return false;//return that they are false if they have different IDs or one is not a task
+		return false;//return that they are false otherwise
 	}
 }
