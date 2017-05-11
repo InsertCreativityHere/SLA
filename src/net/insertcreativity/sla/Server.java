@@ -155,7 +155,7 @@ public class Server implements Closeable
 		{
 			synchronized(serverManagerImpl){//lock serverManagerImpl
 				serverManagerImpl.close();//close the underlying server manager thread
-			}//lock serverManagerImpl
+			}//release serverManagerImpl
 		}
 		
 		/**Class for encapsulating all the functionality of this server, listens for requested connections, and creates new
