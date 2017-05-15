@@ -15,7 +15,6 @@ import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.util.ArrayList;
 import java.util.Locale;
 import com.dropbox.core.DbxClient;
 import com.dropbox.core.DbxEntry;
@@ -313,8 +312,11 @@ public class IOManager
 		return new String[] {};//return an empty array of tasks
 	}
 	
-	//TODO
-	private boolean setNetworkState(boolean state) throws IOException
+	/**Sets the state of the host computer's physical network adapters to either disabled or enabled
+	 * @param state True if the networks should be enabled, false if they should be disabled
+	 * @returns Boolean indicating whether the operation succeeded on all of them
+	 * @throws IOException If an IO exception occurs during the process of setting the states*/
+	boolean setNetworkState(boolean state) throws IOException
 	{
 		if(networkEnabled == state){//if the network is already in the specified state
 			return true;//return that the state was correctly set and do nothing
@@ -342,5 +344,18 @@ public class IOManager
 			process.waitFor();//block until the process completes
 		} catch(InterruptedException interruptedException){}//ignore any interruptions
 		return success;//return whether all the processes were successful
+	}
+	
+	void update()
+	{
+		/**close down the current java process
+		 * copy update.exe into /temp/ [create this folder too] in base directory
+		 * run update.exe from the temp location
+		 */
+		/**git clone into the base directory
+		 * compile the code into the new jar file for this server/client
+		 * run the appropiate jar file, and terminate this java process
+		 */
+		/**Have the file manager delete /temp/ on construction*/
 	}
 }
