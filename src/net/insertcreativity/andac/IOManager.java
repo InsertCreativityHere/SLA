@@ -1,6 +1,7 @@
 
 package net.insertcreativity.andac;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -9,10 +10,12 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.net.URL;
 import java.net.URLClassLoader;
+import java.util.ArrayList;
 import java.util.Locale;
 import com.dropbox.core.DbxClient;
 import com.dropbox.core.DbxEntry;
@@ -23,35 +26,39 @@ import com.dropbox.core.DbxWriteMode;
 import net.insertcreativity.util.LogPrinter;
 import net.insertcreativity.util.Util;
 
-/**Class responsible for encapsulating all the file management for a server or client. It creates and updates
- * all the files necessary for it't operation and provides a means of communication to the master repository,
- * and master database, which allows outside control and management of the server or client.*/
-public class FileManager
+/**Class responsible for encapsulating all the input/output and file management need for a server of client.
+ * It creates and updates all the files necessary for it's operation and provides a means of communication
+ * to the master repository and database, which allows outside control and management of the server or client,
+ * in addition to facilitating communication between servers and clients in a cloaked manner*/
+public class IOManager
 {
 	/**Client used to communicate with the master database*/
 	private final DbxClient database;
 	/**Class loader for dynamically loading in task classes*/
 	private final URLClassLoader classLoader;
-	/**Reference to the log printer that the file manager should log it's activity to*/
+	/**Reference to the log printer that the io manager should log it's activity to*/
 	private final LogPrinter log;
-	/**Reference to the base directory that the file manager manages*/
+	/**Reference to the base directory that the io manager manages*/
 	private final File baseDirectory;
-	/**The name of the server that this file manager should reference in ANDAC (null if this is a client)*/
+	/**The name of the server that this io manager should reference in ANDAC (null if this is a client)*/
 	private final String serverName;
+	/**Flag for whether or not the host computer's networks are currently enabled*/
+	private boolean networkEnabled = true;
 	
-	/**Constructs a new file manager, which automatically constructs the necessary file structures and programs for the
-	 * server or client to function
-	 * @param logPrinter The log that this file manager should log all it's activity to
-	 * @param directory The base directory that the file manager constructs it's files in
-	 * @param name The name of the server that this file manager should reference in ANDAC (null if this is a client)
+	/**Constructs a new io manager, which constructs and downloads all the necessary files an programs for the
+	 * client or server to function properly, in addition to establishing external connections to the master
+	 * database and repository.
+	 * @param logPrinter The log that this io manager should log all it's activity to
+	 * @param directory The base directory that the io manager constructs it's files in
+	 * @param name The name of the server that this io manager should reference in ANDAC (null if this is a client)
 	 * @param authCode The authorization code for accessing the master database
 	 * @throws DbxException If there's an issue communicating with the master database
 	 * @throws IOException if there's an issue constructing the local file environment*/
-	private FileManager(LogPrinter logPrinter, File directory, String name, String authCode) throws DbxException, IOException
+	private IOManager(LogPrinter logPrinter, File directory, String name, String authCode) throws DbxException, IOException
 	{
-		log = logPrinter;//set this file manager's log
-		baseDirectory = directory;//set the base directory that this file manager should manage
-		serverName = "/ANDAC/" + name;//set the name that this file manager should use in ANDAC
+		log = logPrinter;//set this io manager's log
+		baseDirectory = directory;//set the base directory that this io manager should manage
+		serverName = "/ANDAC/" + name;//set the name that this file io should use in ANDAC
 		File bin = new File(baseDirectory, "bin");//create a reference to the bin folder
 		if(bin.mkdirs()){//if the bin directory was created
 			log.log("Created the bin directory");//log that the bin directory was created
@@ -81,22 +88,22 @@ public class FileManager
 		}
 		classLoader = new URLClassLoader(new URL[] {taskDir.toURI().toURL()});//create the task class loader
 		log.log("Successfully created the task class loader at " + taskDir.getAbsolutePath());//log that the task class loader was created successfully
-	}
+}
 	
-	/**Creates a new file manager to set up and manage the files necessary for the server to function, both locally
+	/**Creates a new io manager to set up and manage the files necessary for the server to function, both locally
 	 * and in the server's ANDAC entry, as well as establishing a connection to the master database and repository
 	 * for transmitting results and data remotely
-	 * @param logPrinter The log that the file manager should log all it's activity to
+	 * @param logPrinter The log that the io manager should log all it's activity to
 	 * @param clientDirectory File object for the directory that the client is running from
-	 * @param name The name of the server that this file manager should reference in ANDAC
+	 * @param name The name of the server that this io manager should reference in ANDAC
 	 * @param authCode The authorization code for accessing the master database
 	 * @throws DbxException If there's an issue communicating with the master database
 	 * @throws IOException if there's an issue constructing the local file environment*/
-	static FileManager createServerFileManager(LogPrinter logPrinter, File serverDirectory, String name, String authCode) throws IOException, DbxException
+	static IOManager createServerFileManager(LogPrinter logPrinter, File serverDirectory, String name, String authCode) throws IOException, DbxException
 	{
-		logPrinter.log("Initializing server file manager...");//log that a new server file manager is being initialized
-		FileManager fileManager = new FileManager(logPrinter, serverDirectory, name, authCode);//create a new file manager for the server
-		logPrinter.log("Successfully created new client file manager at: " + serverDirectory.getAbsolutePath());//log that the server file manager was created successfully
+		logPrinter.log("Initializing server IO manager...");//log that a new server io manager is being initialized
+		IOManager fileManager = new IOManager(logPrinter, serverDirectory, name, authCode);//create a new io manager for the server
+		logPrinter.log("Successfully created new client IO manager at: " + serverDirectory.getAbsolutePath());//log that the server io manager was created successfully
 		if(fileManager.database.createFolder("/ANDAC/" + name) != null){//if this server's folder in ANDAC was just created
 			logPrinter.log("Added server to ANDAC database");//log that the server has been added into ANDAC
 		}
@@ -116,22 +123,22 @@ public class FileManager
 			fileManager.uploadData("/ANDAC/" + name + "/status.txt", new byte[] {});//upload an empty status file to ANDAC
 			logPrinter.log("Successfully created new status file for " + name);//log that the server's status file was created
 		}
-		return fileManager;//return the new file manager created for the server
+		return fileManager;//return the new io manager created for the server
 	}
 	
-	/**Creates a new file manager to set up and manage the files necessary for the client to function, as well
+	/**Creates a new io manager to set up and manage the files necessary for the client to function, as well
 	 * as establishing a connection to the master database and repository for downloading data and updating itself
-	 * @param logPrinter The log that the file manager should log all it's activity to
+	 * @param logPrinter The log that the io manager should log all it's activity to
 	 * @param clientDirectory File object for the directory that the client is running from
 	 * @param authCode The authorization code for accessing the master database
 	 * @throws DbxException If there's an issue communicating with the master database
 	 * @throws IOException if there's an issue constructing the local file environment*/
-	static FileManager createClientFileManager(LogPrinter logPrinter, File clientDirectory, String authCode) throws IOException, DbxException
+	static IOManager createClientFileManager(LogPrinter logPrinter, File clientDirectory, String authCode) throws IOException, DbxException
 	{
-		logPrinter.log("Initializing client file manager...");//log that a new client file manager is being initialized
-		FileManager fileManager = new FileManager(logPrinter, clientDirectory, null, authCode);//create a new file manager for the client
-		logPrinter.log("Successfully created new client file manager at: " + clientDirectory.getAbsolutePath());//log that the client file manager was created successfully
-		return fileManager;//return the new file manager created for the client
+		logPrinter.log("Initializing client IO manager...");//log that a new client io manager is being initialized
+		IOManager fileManager = new IOManager(logPrinter, clientDirectory, null, authCode);//create a new io manager for the client
+		logPrinter.log("Successfully created new client IO manager at: " + clientDirectory.getAbsolutePath());//log that the client io manager was created successfully
+		return fileManager;//return the new io manager created for the client
 	}
 	
 	/**Establishes a connection to the master database, returning a client that can be used to access it directly
@@ -236,7 +243,7 @@ public class FileManager
 		downloadFile(zip.getAbsolutePath(), remotePath);//download the zip file
 		log.log("Successfully downloaded " + name);//log that the zip file was downloaded
 		ProcessBuilder decompress = new ProcessBuilder(new File(baseDirectory, "bin\\7za.exe").getAbsolutePath(), "x", localFile.getAbsolutePath(), "-y");//create a process to decompress the file
-		decompress.redirectErrorStream(true);//merge the process's error stream into the output stream
+		decompress.redirectErrorStream(true);//merge the process's error stream into it's output stream
 		log.log("Starting " + name + " decompression");//log that the decompression portion is beginning
 		Process process = decompress.directory(zip.getParentFile()).start();//start the process in the parent directory
 		InputStream inputStream = process.getInputStream();//retrieve the process's output stream
@@ -304,5 +311,36 @@ public class FileManager
 			}//release tasks.txt
 		}
 		return new String[] {};//return an empty array of tasks
+	}
+	
+	//TODO
+	private boolean setNetworkState(boolean state) throws IOException
+	{
+		if(networkEnabled == state){//if the network is already in the specified state
+			return true;//return that the state was correctly set and do nothing
+		}
+		String stateString = (state? "enable":"disable");//store the string version of the new network state
+		log.log("Setting network state: " + stateString + "d");//log the new network state
+		ProcessBuilder setNetworkState = new ProcessBuilder("wmic", "path", "win32_networkadapter", "where", "physicalAdapter=True", "call", stateString);//create a process to set the network state
+		setNetworkState.redirectErrorStream(true);//merge the process's error stream with it's output stream
+		Process process = setNetworkState.directory(new File(System.getenv("SystemRoot") + "\\System32")).start();//set the process from the system directory
+		BufferedReader bufferedReader = new BufferedReader(new InputStreamReader(process.getInputStream()));//retrieve the process's output stream and wrap it in a reader
+		String line;//create a variable for storing the line read by the buffered reader
+		boolean success = true;//create a variable for storing whether all the processes were successful
+		while((line = bufferedReader.readLine()) != null){//while the end of stream has not been reached
+			if(line.length() != 0){//if the line isn't empty
+				line = line.trim();//remove any unnecessary whitespace
+				log.println(line);//write the line into the log
+				int returnIndex = line.toLowerCase().indexOf("returnvalue");//get the index where 'ReturnValue' occurs
+				if(returnIndex > -1){//if the line contains the return value code
+					int equalsIndex = line.indexOf('=', returnIndex);//get the index of the next equals sign after 'ReturnValue'
+					success &= line.substring(equalsIndex, line.indexOf(';', equalsIndex)).trim().equals("0");//and whether the return value was 0 with whether the process is successful
+				}
+			}
+		}
+		try{//try to wait for the process to fully complete
+			process.waitFor();//block until the process completes
+		} catch(InterruptedException interruptedException){}//ignore any interruptions
+		return success;//return whether all the processes were successful
 	}
 }

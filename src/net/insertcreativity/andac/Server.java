@@ -201,4 +201,16 @@ public class Server
 			}
 		}
 	}
+	
+	//TODO
+	private class ClientManager implements Runnable, Closeable
+	{
+		
+	}
+	
+	//TODO
+	private class GuiManager implements Runnable, Closeable
+	{
+		
+	}
 }
