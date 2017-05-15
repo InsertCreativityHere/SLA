@@ -10,8 +10,14 @@ import java.nio.charset.StandardCharsets;
 /**Extension of LogWriter with the capabilities of a PrintStream, and synchronous logging*/
 public class LogPrinter extends PrintStream
 {
+	/**Lock for ensuring synchronous access to the log outputs*/
+	private final Object OUT_LOCK = new Object();
 	/**Reference to the underlying log writer*/
 	private final LogWriter log;
+	/**Charset that the log is using to encode it's characters*/
+	public final Charset encoding;
+	/**Flag for whether or not this log printer should flush after a new line is written*/
+	private boolean autoFlush;
 	
 	/**Create a new log printer that uses UTF-8 encoding and has a buffer size of 8192 with auto flushing
 	 * @throws UnsupportedEncodingException If UTF_8 isn't supported*/
@@ -63,6 +69,8 @@ public class LogPrinter extends PrintStream
 	{
 		super(logWriter, autoFlush, logWriter.encoding.name());//initialize the underlying print stream
 		log = logWriter;//set the underlying log writer for this log printer
+		encoding = logWriter.encoding;//set the encoding that this log printer is using
+		this.autoFlush = autoFlush;//set whether this should auto flush new lines
 	}
 	
 	/**Subscribe an output-stream to this log so that it'll receive the log's output
@@ -71,7 +79,9 @@ public class LogPrinter extends PrintStream
 	 * @return The output-stream previously subscribed under the provided name, or null if the name is new*/
 	public OutputStream addOutput(String name, OutputStream output)
 	{
-		return log.addOutput('O' + name, output);//return the result from the underlying log writer
+		synchronized(OUT_LOCK){//lock log.outputs
+			return log.addOutput('O' + name, output);//return the result from the underlying log writer
+		}//release log.outputs
 	}
 	
 	/**Unsubscribes an output-stream from this log
@@ -79,7 +89,9 @@ public class LogPrinter extends PrintStream
 	 * @return The output-stream that was removed, or null if there was no output with the specified name*/
 	public OutputStream removeOutput(String name)
 	{
-		return log.removeOutput('O' + name);//return the result from the underlying log writer
+		synchronized(OUT_LOCK){//lock log.outputs
+			return log.removeOutput('O' + name);//return the result from the underlying log writer
+		}//release log.outputs
 	}
 	
 	/**Logs a string with a date-stamp
@@ -88,6 +100,9 @@ public class LogPrinter extends PrintStream
 	{
 		synchronized(this){//lock this
 			log.log(s);//log the string to the underling log writer
+			if(autoFlush){//if this should auto flush
+				log.flush();//flush the underlying log writer
+			}
 		}//release this
 	}
 	
@@ -96,8 +111,28 @@ public class LogPrinter extends PrintStream
 	 * reset the system output stream to how it was originally, it won't close the stream*/
 	public void captureOut()
 	{
-		log.addOutput("SysOut", System.out);//add the system output stream to the log outputs
+		synchronized(OUT_LOCK){//lock log.outputs
+			log.addOutput("SysOut", System.out);//add the system output stream to the log outputs
+		}//release log.outputs
 		System.setOut(this);//replace the system output stream with this log printer
+	}
+	
+	/**Release the system's output stream if this has it captured
+	 * @throws IllegalStateException If this log printer wasn't the last to capture the system's
+	 * output stream and that still has it captured*/
+	public void releaseOut()
+	{
+		if(!System.out.equals(this)){//if this log printer isn't in the place of the system output stream
+			throw new IllegalStateException("The system error stream wasn't last captured by this log");
+		}
+		OutputStream sysOut;//reference for the system output stream held by this log printer
+		synchronized(OUT_LOCK){//lock log.outputs
+			sysOut = log.removeOutput("sysOut");//attempt to remove the system's output stream
+		}
+		if(sysOut == null){//if this log printer doesn't have the system's output stream captured
+			throw new IllegalStateException("The system output stream is not held by this log");
+		}
+		System.setOut((PrintStream)sysOut);//set the system's output stream 
 	}
 	
 	/**Captures the system's error stream, routing all it's output through the log printer first.
@@ -105,21 +140,51 @@ public class LogPrinter extends PrintStream
 	 * reset the system error stream to how it was originally, it won't close the stream*/
 	public void captureErr()
 	{
-		log.addOutput("SysErr", System.err);//add the system error stream to the log outputs
+		synchronized(OUT_LOCK){//lock log.outputs
+			log.addOutput("SysErr", System.err);//add the system error stream to the log outputs
+		}//release log.outputs
 		System.setErr(this);//replace the system error stream with this log printer
+	}
+	
+	/**Release the system's error stream if this has it captured
+	 * @throws IllegalStateException If this log printer wasn't the last to capture the system's
+	 * error stream that still has it captured*/
+	public void releaseErr()
+	{
+		if(!System.err.equals(this)){//if this log printer isn't in the place of the system error stream
+			throw new IllegalStateException("The system error stream wasn't last captured by this log");
+		}
+		OutputStream sysErr;//reference for the system error stream held by this log printer
+		synchronized(OUT_LOCK){//lock log.outputs
+			sysErr = log.removeOutput("sysErr");//attempt to remove the system's error stream
+		}
+		if(sysErr == null){//if this log printer doesn't have the system's error stream captured
+			throw new IllegalStateException("The system error stream is not held by this log");
+		}
+		System.setOut((PrintStream)sysErr);//set the system's output stream 
+	}
+	
+	/**Flushes the underlying print stream*/
+	public void flush()
+	{
+		synchronized(OUT_LOCK){//lock log.outputs
+			super.flush();//flush the underlying print stream
+		}//release log.outputs
 	}
 	
 	/**Close the underlying print stream, releasing any captured outputs first*/
 	public void close()
 	{
-		PrintStream outputStream = (PrintStream)log.removeOutput("SysOut");//remove the system output stream if it's captured
-		if(outputStream != null){//if there was a captured system output stream
-			System.setOut(outputStream);//set the system output stream back to the original
-		}
-		PrintStream errorStream = (PrintStream)log.removeOutput("SysErr");//remove the system error stream if it's captured
-		if(errorStream != null){//if there was a captured system error stream
-			System.setErr(errorStream);//set the system error stream back to the original
-		}
-		super.close();//close the underlying print stream
+		synchronized(OUT_LOCK){//lock log.outputs
+			OutputStream outputStream = log.removeOutput("SysOut");//remove the system output stream if it's captured
+			if(outputStream != null){//if there was a captured system output stream
+				System.setOut((PrintStream)outputStream);//set the system output stream back to the original
+			}
+			OutputStream errorStream = log.removeOutput("SysErr");//remove the system error stream if it's captured
+			if(errorStream != null){//if there was a captured system error stream
+				System.setErr((PrintStream)errorStream);//set the system error stream back to the original
+			}
+			super.close();//close the underlying print stream
+		}//release log.outputs
 	}
 }
