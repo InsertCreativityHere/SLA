@@ -25,8 +25,8 @@ import com.dropbox.core.DbxWriteMode;
 import net.insertcreativity.util.LogPrinter;
 import net.insertcreativity.util.Util;
 
-/**Class responsible for encapsulating all the input/output and file management need for a server of client.
- * It creates and updates all the files necessary for it's operation and provides a means of communication
+/**Class responsible for encapsulating all the input/output and file management needs of a server or client.
+ * It creates and maintains all the files necessary for it's operation and provides a means of communication
  * to the master repository and database, which allows outside control and management of the server or client,
  * in addition to facilitating communication between servers and clients in a cloaked manner*/
 public class IOManager
@@ -39,7 +39,9 @@ public class IOManager
 	private final LogPrinter log;
 	/**Reference to the base directory that the io manager manages*/
 	private final File baseDirectory;
-	/**The name of the server that this io manager should reference in ANDAC (null if this is a client)*/
+	/**The ANDAC name of this server or client (clients are prefixed by '[server]/')*/
+	private final String remoteName;
+	/**The ANDAC name of the server to reference in ANDAC (same as remoteName for servers)*/
 	private final String serverName;
 	/**Flag for whether or not the host computer's networks are currently enabled*/
 	private boolean networkEnabled = true;
@@ -48,7 +50,8 @@ public class IOManager
 	 * client or server to function properly, in addition to establishing external connections to the master
 	 * database and repository.
 	 * @param logPrinter The log that this io manager should log all it's activity to
-	 * @param directory The base directory that the io manager constructs it's files in
+	 * @param directory The base directory that the io manager should construct it's files in
+	 * @param name The ANDAC name this io manager should reference (clients must be prefixed by '[server]/')
 	 * @param name The name of the server that this io manager should reference in ANDAC (null if this is a client)
 	 * @param authCode The authorization code for accessing the master database
 	 * @throws DbxException If there's an issue communicating with the master database
@@ -57,12 +60,22 @@ public class IOManager
 	{
 		log = logPrinter;//set this io manager's log
 		baseDirectory = directory;//set the base directory that this io manager should manage
-		serverName = "/ANDAC/" + name;//set the name that this file io should use in ANDAC
+		int slashIndex = name.indexOf('/');//store the index of a slash in the name
+		database = establishDatabaseConnection(name, authCode);//establish a connection to the master database
+		if(slashIndex != -1){//if the name contains a slash in it (this is a client)
+			remoteName = "/ANDAC/" + name.substring(0, slashIndex) + "/Clients/" + name.substring(slashIndex + 1);//set this client's full ANDAC name
+			serverName = remoteName.substring(0, slashIndex + 7);//set the full ANDAC name for this client's server
+			if(database.getMetadata(serverName) == null){//if this client's server isn't registered in ANDAC
+				throw new IOException("The client's server is unregistered in ANDAC");//except that this client's server is unregistered
+			}
+		} else{//if the name has no slashes in it (this is a server)
+			remoteName = "/ANDAC/" + name;//set this server's full ANDAC name
+			serverName = remoteName;//set this server's name to it's remote name
+		}
 		File bin = new File(baseDirectory, "bin");//create a reference to the bin folder
 		if(bin.mkdirs()){//if the bin directory was created
 			log.log("Created the bin directory");//log that the bin directory was created
 		}
-		database = establishDatabaseConnection(name, authCode);//establish a connection to the master database
 		File zipExe = new File(bin, "7za.exe");//create a reference to the 7zip executable file
 		if(!zipExe.canExecute()){//if the 7zip executable cannot be located or run
 			log.log("7zip executable is missing or inaccessable");//log that the 7zip executable couldn't be executed
@@ -80,14 +93,13 @@ public class IOManager
 			log.log("Git directory is missing or damaged");//log that the Git bash couldn't be executed
 			downloadCompressed(gitDir.getAbsolutePath(), "/ANDAC/Git.zip");//download and decompress a copy of Git
 		}
-		
 		File taskDir = new File(bin, "tasks");//create a reference to the task class directory
 		if(taskDir.mkdir()){//if the task directory was created
 			log.log("Created the task directory");//log that the task directory was created
 		}
 		classLoader = new URLClassLoader(new URL[] {taskDir.toURI().toURL()});//create the task class loader
 		log.log("Successfully created the task class loader at " + taskDir.getAbsolutePath());//log that the task class loader was created successfully
-}
+	}
 	
 	/**Creates a new io manager to set up and manage the files necessary for the server to function, both locally
 	 * and in the server's ANDAC entry, as well as establishing a connection to the master database and repository
@@ -98,46 +110,79 @@ public class IOManager
 	 * @param authCode The authorization code for accessing the master database
 	 * @throws DbxException If there's an issue communicating with the master database
 	 * @throws IOException if there's an issue constructing the local file environment*/
-	static IOManager createServerFileManager(LogPrinter logPrinter, File serverDirectory, String name, String authCode) throws IOException, DbxException
+	static IOManager createServerFileManager(LogPrinter logPrinter, File serverDirectory, String serverName, String authCode) throws IOException, DbxException
 	{
 		logPrinter.log("Initializing server IO manager...");//log that a new server io manager is being initialized
-		IOManager fileManager = new IOManager(logPrinter, serverDirectory, name, authCode);//create a new io manager for the server
+		IOManager ioManager = new IOManager(logPrinter, serverDirectory, serverName, authCode);//create a new io manager for the server
 		logPrinter.log("Successfully created new client IO manager at: " + serverDirectory.getAbsolutePath());//log that the server io manager was created successfully
-		if(fileManager.database.createFolder("/ANDAC/" + name) != null){//if this server's folder in ANDAC was just created
+		if(ioManager.database.createFolder(ioManager.remoteName) != null){//if this server's folder in ANDAC was just created
 			logPrinter.log("Added server to ANDAC database");//log that the server has been added into ANDAC
 		}
-		if(fileManager.database.createFolder("/ANDAC/" + name + "/Results") != null){//if the server's results folder was just created
+		if(ioManager.database.createFolder(ioManager.remoteName + "/Results") != null){//if the server's results folder was just created
 			logPrinter.log("Created results folder for server in ANDAC");//log that the server's results folder was just created
 		}
+		if(ioManager.database.createFolder(ioManager.remoteName + "/Clients") != null){//if the server's clients folder was just created
+			logPrinter.log("Created results folder for server in ANDAC");//log that the server's clients folder was just created
+		}
 		File logFile = new File(serverDirectory, "log.txt");//create a reference to the server's log file
-		if(fileManager.database.getMetadata("/ANDAC/" + name + "/log.txt") == null){//if this server doesn't have a log file in ANDAC
+		if(ioManager.database.getMetadata(ioManager.remoteName + "/log.txt") == null){//if this server doesn't have a log file in ANDAC
 			logFile.createNewFile();//create a new log file for the server
-			fileManager.uploadFile("/ANDAC/" + name + "/log.txt", logFile.getAbsolutePath());//upload the new log file to ANDAC
-			logPrinter.log("Successfully created new log file for " + name);//log that the server's log file was created
+			ioManager.uploadFile(ioManager.remoteName + "/log.txt", logFile.getAbsolutePath());//upload the new log file to ANDAC
+			logPrinter.log("Successfully created new log file for " + serverName);//log that the server's log file was created
 		} else{//if this server has a log file in ANDAC
-			fileManager.downloadFile("/ANDAC/" + name + "/log.txt", logFile.getAbsolutePath());//download the server's log file
+			ioManager.downloadFile(ioManager.remoteName + "/log.txt", logFile.getAbsolutePath());//download the server's log file
 			logPrinter.log("Retrieved server log file from ANDAC");//log that the server's log file has been successfully downloaded
 		}
-		if(fileManager.database.getMetadata("/ANDAC/" + name + "/status.txt") == null){//if this server doesn't have a status file in ANDAC
-			fileManager.uploadData("/ANDAC/" + name + "/status.txt", new byte[] {});//upload an empty status file to ANDAC
-			logPrinter.log("Successfully created new status file for " + name);//log that the server's status file was created
+		if(ioManager.database.getMetadata(ioManager.remoteName + "/status.txt") == null){//if this server doesn't have a status file in ANDAC
+			ioManager.uploadData(ioManager.remoteName + "/status.txt", new byte[] {});//upload an empty status file to ANDAC
+			logPrinter.log("Successfully created new status file for " + serverName);//log that the server's status file was created
 		}
-		return fileManager;//return the new io manager created for the server
+		return ioManager;//return the new io manager created for the server
 	}
 	
 	/**Creates a new io manager to set up and manage the files necessary for the client to function, as well
 	 * as establishing a connection to the master database and repository for downloading data and updating itself
 	 * @param logPrinter The log that the io manager should log all it's activity to
 	 * @param clientDirectory File object for the directory that the client is running from
+	 * @param name The ANDAC name this io manager should reference (must be prefixed by '[server]/')
 	 * @param authCode The authorization code for accessing the master database
 	 * @throws DbxException If there's an issue communicating with the master database
 	 * @throws IOException if there's an issue constructing the local file environment*/
-	static IOManager createClientFileManager(LogPrinter logPrinter, File clientDirectory, String authCode) throws IOException, DbxException
+	static IOManager createClientFileManager(LogPrinter logPrinter, File clientDirectory, String clientName, String authCode) throws IOException, DbxException
 	{
 		logPrinter.log("Initializing client IO manager...");//log that a new client io manager is being initialized
-		IOManager fileManager = new IOManager(logPrinter, clientDirectory, null, authCode);//create a new io manager for the client
+		IOManager ioManager = new IOManager(logPrinter, clientDirectory, null, authCode);//create a new io manager for the client
 		logPrinter.log("Successfully created new client IO manager at: " + clientDirectory.getAbsolutePath());//log that the client io manager was created successfully
-		return fileManager;//return the new io manager created for the client
+		return ioManager;//return the new io manager created for the client
+	}
+	
+	/**TODO*/
+	void setClientCloaked() throws IOException, DbxException
+	{
+		File logFile = new File(baseDirectory, "log.txt");//create a reference to the client's log file
+		logFile.createNewFile();//create a new log file for the client
+		uploadFile(remoteName + "/log.txt", logFile.getAbsolutePath());//upload the new log file to ANDAC
+		log.log("Successfully created new log file for " + serverName);//log that the client's log file was created
+		uploadData(remoteName + "/status.txt", new byte[] {});//upload an empty status file to ANDAC
+		log.log("Successfully created new status file for " + serverName);//log that the client's status file was created
+	}
+	
+	/**TODO*///make sure this is only called after server knows not to upload tasks.txt to the client remote folder
+	String[] setClientUncloaked() throws IOException, DbxException
+	{
+		String[] tasks = fetchTasks();//fetch all the leftover tasks for this client
+		String[] remoteData = new String[tasks.length + 2];//create an array for holding all the client's remote data in
+		System.arraycopy(tasks, 0, remoteData, 2, tasks.length);//copy the leftover tasks into the remote data array
+		if(database.getMetadata(remoteName + "/log.txt") != null){//if this client has a log file in ANDAC
+			remoteData[0] = new String(downloadData(remoteName + "/log.txt"), log.encoding);//download the client's log into the remote data array
+			log.log("Successfully retrieved remote log data");//log that the client's log data was downloaded successfully
+		}
+		if(database.getMetadata(remoteName + "/status.txt") != null){//if this client has a status file in ANDAC
+			remoteData[1] = new String(downloadData(remoteName + "/status.txt"), log.encoding);//download the client's status file into the remote data array
+			log.log("Successfully retrieved remote status data");//log that the client's status data was downloaded successfully
+		}
+		database.delete(remoteName);//delete this client's ANDAC entry
+		return remoteData;//return all this client's remoteData
 	}
 	
 	/**Establishes a connection to the master database, returning a client that can be used to access it directly
@@ -182,9 +227,9 @@ public class IOManager
 	 * @throws DbxException If the download encounters a problem*/
 	void updateANDAC(String status) throws IOException, DbxException
 	{
-		uploadData(serverName + "/status.txt", status.getBytes(log.encoding));//upload the status string to this server's status file
+		uploadData(remoteName + "/status.txt", status.getBytes(log.encoding));//upload the status string to this server's status file
 		synchronized(log){//lock log
-			uploadFile(serverName + "/log.txt", new File(baseDirectory, "log.txt").getAbsolutePath());//upload this server's log file to it's ANDAC entry
+			uploadFile(remoteName + "/log.txt", new File(baseDirectory, "log.txt").getAbsolutePath());//upload this server's log file to it's ANDAC entry
 		}//release log
 	}
 	
@@ -292,26 +337,26 @@ public class IOManager
 			throw new IOException("Failed to load in class", classNotFoundException);//except that the class wasn't loaded correctly
 		}
 	}
-	
+
 	/**Checks ANDAC to see if any new tasks are queued for this server, downloading any that are
 	 * @return An array of strings containing the tasks to be executed by the server
 	 * @throws IOException If the data couldn't be retrieved properly
 	 * @throws DbxException If the download encountered a problem*/
 	String[] fetchTasks() throws IOException, DbxException
 	{
-		if(database.getMetadata(serverName + "/tasks.txt") != null){//if this server has tasks queued from ANDAC
+		if(database.getMetadata(remoteName + "/tasks.txt") != null){//if this server has tasks queued from ANDAC
 			try{//wrapper to ensure the lock file is deleted
-				uploadData(serverName + "/LOCK", new byte[] {});//lock tasks.txt
-				String[] tasks = new String(downloadData("/ANDAC/" + serverName + "/tasks.txt"), log.encoding).split("\n");//download and store all the new tasks
+				uploadData(remoteName + "/LOCK.a", new byte[] {});//lock tasks.txt
+				String[] tasks = new String(downloadData(remoteName + "/tasks.txt"), log.encoding).split("\n");//download and store all the new tasks
 				log.log(tasks.length + " new tasks downloaded");//log the number of new tasks downloaded
 				return tasks;//return the tasks
 			} finally{//ensure the lock file is deleted
-				database.delete(serverName + "/LOCK");//delete the lock file
+				database.delete(remoteName + "/LOCK.a");//release tasks.txt
 			}//release tasks.txt
 		}
 		return new String[] {};//return an empty array of tasks
 	}
-	
+
 	/**Sets the state of the host computer's physical network adapters to either disabled or enabled
 	 * @param state True if the networks should be enabled, false if they should be disabled
 	 * @returns Boolean indicating whether the operation succeeded on all of them

@@ -1,4 +1,5 @@
-
+//Do we really even need servers actually? If sockets are going to be this much of a hassle,
+//why not just distribute everything across the clients equally.
 package net.insertcreativity.andac;
 
 import java.io.Closeable;
@@ -23,6 +24,8 @@ public class Server
 	private final LogPrinter log;
 	/**The name for this server to use in ANDAC*/
 	private final String serverName;
+	/**Flag for whether or not the server is in cloaking mode*/
+	private boolean isCloaked;
 	
 	/**Wrapper for the server manager's implementation; necessary because the server manager impl might construct a new copy of
 	 * itself as a form of self repair, in which case any references will remain to the old broken copy. This wrapper ensures
