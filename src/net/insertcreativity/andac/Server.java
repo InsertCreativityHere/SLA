@@ -5,6 +5,7 @@ import java.awt.BorderLayout;
 import java.io.Closeable;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.ConnectException;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -19,7 +20,7 @@ import javax.swing.JTextField;
 import net.insertcreativity.util.LogPrinter;
 import net.insertcreativity.util.MinimalStack;
 
-public class Server
+public class Server implements Closeable//TODO http://www.techrepublic.com/article/protect-your-network-traffic-using-javas-encryption-features/ USE ENCRYPTION
 {
 	/**Map of all the clients connected to this server keyed by name, also it's own lock*/
 	private final HashMap<String, ClientManager> clients;
@@ -138,10 +139,8 @@ public class Server
 		}
 
 
-
-		/**Class for encapsulating all the functionality of this server, listens for requested connections, and creates new
-		 * ClientManagers for handling them. Terminates when the serverInput socket is closed, and keepRunning is false,
-		 * otherwise will attempt a self-repair. TODO*/
+		/**Class for establishing connections being established with this server, first listening for requested connections,
+		 * and passing them alone to their respective client managers.*/
 		private class ServerManagerImpl extends Thread implements Closeable
 		{
 			/**The input server socket that is used to establish input connections with new clients*/
@@ -194,32 +193,114 @@ public class Server
 				log.log("Successfully created server manager");//log the successful creation of the server manager
 			}
 
-			/**Runs the server manager thread, which listens for client connections, determines which are valid, and creates
-			 * client managers for the clients who get accepted*/
+			/**Runs the server manager thread, which listens for incoming connections, determines which are valid, and links them with
+			 * a corresponding manager into this server*/
 			public void run()
 			{
 				try{//wrapper for the server manager loop
-					ClientManager clientManager = null;
-					Socket inputSocket = null;
 					while(keepRunning){//while the server manager should continue running
+						Socket inputSocket = serverInput.accept();//block until a connection is available and accept it
+						
+						
+						
+						
+						try{//try to close the input socket
+							inputSocket.close();//close the input socket
+						} catch(IOException ioException){
+							
+						}
+						
+						
+						
+						try{//try to listen for a connection and accept it if valid
+							Socket inputSocket = serverInput.accept();//block until a connection is available and accept it
+							
+						}
+						
+						
+						
+						
+						
+						Socket inputSocket = null;//variable for holding the inputSocket if it needs to be closed in the finally block
+						Socket outputSocket = null;//variable for holding the outputSocket if it needs to be closed in the finally block
+						boolean dropConnection = false;//flag for whether the connection should be dropped in the finally block
+						try{//try to listen for a new client connection and attempt to accept it
+							
+						} finally{//ensure the connection gets dropped if it should be
+							if(dropConnection){//if the connection should be dropped
+								try{//try to close the input socket
+									inputSocket.close();
+								} catch(Exception exception){
+									
+								}
+								try{
+									outputSocket.close();
+								} catch(Exception exception){
+									
+								}
+							}
+						}
+						
+						
+						
+						input
+						
+						
+						
+						
+						
+						
 						try{//try to listen for a new client connection and attempt to accept it
 							inputSocket = serverInput.accept();//block until a connection is available and accept it
 							log.log("New connection [" + inputSocket.getRemoteSocketAddress().toString() + "]");//log the new connection
-							clientManager = new ClientManager(inputSocket, serverOutput.accept());//create a new client manager
+							synchronized(clients){//lock clients
+								try{//try to read in the client's name
+									inputStream = inputSocket.getInputStream();//get the input socket's input stream
+									byte[] nameBytes = new byte[inputStream.read()];//allocate bytes for the client's name
+									inputStream.read(nameBytes);//read in the client's name
+								} catch(IOException ioException){//if the client's name couldn't be read
+									
+								}
+								
+								//TODO also make the streams into secure streams or something...
+								//TODO get the 'name' here or something, also 'outputSocket'
+								
+								
+								
+								if(clients.containsKey(name)){//if this is an existent connection
+									clients.get(name).reestablishConnection(inputSocket, outputSocket);//reestablish the client's connection
+									log.log("Successfully re-established connection [" + name + ":" + inputSocket.getRemoteSocketAddress() + "]");//log the connection succeeded
+								} else{//if this is a new connection
+									clientManager = new ClientManager(name, inputSocket, outputSocket);//create a new client manager
+									log.log("Successfully established connection [" + name + ":" + inputSocket.getRemoteSocketAddress() + "]");//log the connection succeeded
+									clients.put(name, clientManager);//add the new client manager to the client map
+									new Thread(clientManager).start();//start the client manager's thread
+									//TODO have the client manager log 'client manager made instead of being here'
+								}
+							}//release clients
 						} catch(SocketTimeoutException socketTimeoutException){//if the client took too long (>10s) to connect
 							log.log("Connection timed out [" + inputSocket.getRemoteSocketAddress().toString() + "]");//log that the connection timed out
-							continue;//continue to wait for another connection
 						} catch(ConnectException connectException){//TODO make sure client manager throws this for all it's own things
 							log.log("Connection failed [" + inputSocket.getRemoteSocketAddress().toString() + "]");//log that the connection failed
 							connectException.printStackTrace(log);//log the exception
-						} finally{//ensure the input socket gets cleared
-							inputSocket = null;//clear the input socket's reference
+						} finally{//ensure all the loop's references get cleared
+							clientManager = null;
+							inputSocket = null;
+							outputSocket = null;
+							inputStream = null;
+							name = null;
 						}
-						synchronized(clientManagers){//lock clientManagers
-							clientManagers.put(clientManager.clientName, clientManager);//add the new client manager to the map
-						}//release clientManagers
-						new Thread(clientManager).start();//start the client manager's thread
-						log.log("Successfully established connection [" + inputSocket.getRemoteSocketAddress() + "]");//log the connection succeeded
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
+						
 					}
 				} catch(Exception exception){
 					if(!(exception instanceof SocketException) || (keepRunning)){//if this isn't an expected socket closure exception
@@ -262,6 +343,7 @@ public class Server
 									exception.printStackTrace(log);//log the exception
 								}
 							}
+							Server.this.close();//close the rest of the server down
 						}
 						log.log("Server manager thread terminated");//log that the server manager thread has terminated
 					}//release serverInput, keepRunning, parent

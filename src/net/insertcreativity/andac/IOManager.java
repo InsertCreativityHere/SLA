@@ -114,7 +114,6 @@ public class IOManager
 	{
 		logPrinter.log("Initializing server IO manager...");//log that a new server io manager is being initialized
 		IOManager ioManager = new IOManager(logPrinter, serverDirectory, serverName, authCode);//create a new io manager for the server
-		logPrinter.log("Successfully created new client IO manager at: " + serverDirectory.getAbsolutePath());//log that the server io manager was created successfully
 		if(ioManager.database.createFolder(ioManager.remoteName) != null){//if this server's folder in ANDAC was just created
 			logPrinter.log("Added server to ANDAC database");//log that the server has been added into ANDAC
 		}
@@ -137,6 +136,7 @@ public class IOManager
 			ioManager.uploadData(ioManager.remoteName + "/status.txt", new byte[] {});//upload an empty status file to ANDAC
 			logPrinter.log("Successfully created new status file for " + serverName);//log that the server's status file was created
 		}
+		logPrinter.log("Successfully created new server IO manager at: " + serverDirectory.getAbsolutePath());//log that the server io manager was created successfully
 		return ioManager;//return the new io manager created for the server
 	}
 
@@ -159,17 +159,20 @@ public class IOManager
 	/**TODO*/
 	void setClientCloaked() throws IOException, DbxException
 	{
+		log.log("Cloaking this client connection");//log that this client is having it's connections cloaked
 		File logFile = new File(baseDirectory, "log.txt");//create a reference to the client's log file
 		logFile.createNewFile();//create a new log file for the client
 		uploadFile(remoteName + "/log.txt", logFile.getAbsolutePath());//upload the new log file to ANDAC
 		log.log("Successfully created new log file for " + serverName);//log that the client's log file was created
 		uploadData(remoteName + "/status.txt", new byte[] {});//upload an empty status file to ANDAC
 		log.log("Successfully created new status file for " + serverName);//log that the client's status file was created
+		log.log("Cloaking complete");//log that the client was cloaked successfully
 	}
 
-	/**TODO*///make sure this is only called after server knows not to upload tasks.txt to the client remote folder
+	/**TODO*/
 	String[] setClientUncloaked() throws IOException, DbxException
 	{
+		log.log("Uncloaking this client connection");//log that this client is having it's connections uncloaked
 		String[] tasks = fetchTasks();//fetch all the leftover tasks for this client
 		String[] remoteData = new String[tasks.length + 2];//create an array for holding all the client's remote data in
 		System.arraycopy(tasks, 0, remoteData, 2, tasks.length);//copy the leftover tasks into the remote data array
@@ -182,6 +185,7 @@ public class IOManager
 			log.log("Successfully retrieved remote status data");//log that the client's status data was downloaded successfully
 		}
 		database.delete(remoteName);//delete this client's ANDAC entry
+		log.log("Uncloaking complete");//log that the client was uncloaked successfully
 		return remoteData;//return all this client's remoteData
 	}
 
@@ -207,7 +211,10 @@ public class IOManager
 	 * @throws DbxException If the upload encounters a problem*/
 	private DbxEntry uploadFile(String remotePath, String localPath) throws FileNotFoundException, IOException, DbxException
 	{
-		return database.uploadFile(remotePath, DbxWriteMode.add(), -1, new FileInputStream(new File(localPath)));//make a stream for the file and upload it
+		log.log("Uploading " + localPath + " -> " + remotePath);//log that a file is being uploaded
+		DbxEntry dbxEntry = database.uploadFile(remotePath, DbxWriteMode.add(), -1, new FileInputStream(new File(localPath)));//make a stream for the file and upload it
+		log.log("Successfully uploaded " + localPath + " -> " + remotePath);//log that the file was uploaded successfully
+		return dbxEntry;//return the upload's meta-data
 	}
 
 	/**Uploads byte data to the master database stored as a file of the specified name
@@ -218,7 +225,10 @@ public class IOManager
 	 * @throws DbxException If the upload encounters a problem*/
 	private DbxEntry uploadData(String remotePath, byte[] data) throws IOException, DbxException
 	{
-		return database.uploadFile(remotePath, DbxWriteMode.add(), -1, new ByteArrayInputStream(data));//wrap the data in an input stream and upload it
+		log.log("Uploading byte to " + remotePath);//log that data is being uploaded
+		DbxEntry dbxEntry = database.uploadFile(remotePath, DbxWriteMode.add(), -1, new ByteArrayInputStream(data));//wrap the data in an input stream and upload it
+		log.log("Successfully uploaded bytes to " + remotePath);//log that the data was uploaded successfully
+		return dbxEntry;//return the upload's meta-data
 	}
 
 	/**Updates the server's log and status files in ANDAC
@@ -227,10 +237,12 @@ public class IOManager
 	 * @throws DbxException If the download encounters a problem*/
 	void updateANDAC(String status) throws IOException, DbxException
 	{
+		log.log("Updating ANDAC log and status files...");//log that the log and status files are being updated in ANDAC
 		uploadData(remoteName + "/status.txt", status.getBytes(log.encoding));//upload the status string to this server's status file
 		synchronized(log){//lock log
 			uploadFile(remoteName + "/log.txt", new File(baseDirectory, "log.txt").getAbsolutePath());//upload this server's log file to it's ANDAC entry
 		}//release log
+		log.log("Updated ANDAC log and status files");//log that the log and status files were updated in ANDAC
 	}
 
 	/**Upload the results of task into this server's ANDAC entry under the 'Results' directory
@@ -240,13 +252,21 @@ public class IOManager
 	 * @throws DbxException If the results couldn't be uploaded properly*/
 	void uploadResult(String name, Serializable[] results) throws IOException, DbxException
 	{
+		log.log("Uploading results for: " + name);//log that results are being uploaded
 		ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();//create a byte array stream for writing all the results into as bytes
 		try(ObjectOutputStream objectOutputStream = new ObjectOutputStream(byteArrayOutputStream)){//create an object output stream for writing the results to
 			for(Serializable result : results){//iterate through all the results
 				objectOutputStream.writeObject(result);//write the result into the output stream
 			}
 		}
-		uploadData(serverName + "/Results/" + name, byteArrayOutputStream.toByteArray());//upload the byte array of results into a results file in ANDAC
+		uploadData(serverName + "/Results/" + name + ".dat", byteArrayOutputStream.toByteArray());//upload the byte array of results into a results file in ANDAC
+		log.log("Succesfully uploaded results for: " + name);//log that the results were uploaded successfully
+	}
+	
+	//TODO
+	void uploadTasks()
+	{
+		
 	}
 
 	/**Downloads a file from the master database
@@ -258,6 +278,7 @@ public class IOManager
 	 * @throws DbxException If the download encountered a problem*/
 	File downloadFile(String remotePath, String localPath) throws FileNotFoundException, IOException, DbxException
 	{
+		log.log("Downloading " + localPath + " <- " + remotePath);//log that a file is being downloaded
 		File localFile = new File(localPath);//create a reference to the download location
 		localFile.getParentFile().mkdirs();//attempt to create any parent folders that this file should be inside
 		Util.delete(localFile);//delete anything at the local file's location
@@ -266,8 +287,9 @@ public class IOManager
 			if(database.getFile(remotePath, null, fileOutputStream) == null){//if the remote file didn't exist in the master database
 				throw new FileNotFoundException(remotePath + " could not be located in the master database");//except that the file couldn't be found
 			}
-			return localFile;//return the reference to the local file
 		}
+		log.log("Successfully downloaded " + localPath + " <- " + remotePath);//log that the file was downloaded successfully
+		return localFile;//return the reference to the local file
 	}
 
 	/**Downloads and decompresses a zip file from the master database
@@ -282,13 +304,11 @@ public class IOManager
 		File localFile = new File(localPath);//create a reference to the local file location
 		Util.delete(localFile);//delete anything that might be in it's place
 		String name = remotePath.substring(remotePath.lastIndexOf('/'));//get the name of the file for logging purposes
-		log.log("Downloading " + name + "...");//log that the file download is beginning
 		File zip = new File(localFile, name);//create a reference to the zip file
 		downloadFile(zip.getAbsolutePath(), remotePath);//download the zip file
-		log.log("Successfully downloaded " + name);//log that the zip file was downloaded
 		ProcessBuilder decompress = new ProcessBuilder(new File(baseDirectory, "bin\\7za.exe").getAbsolutePath(), "x", localFile.getAbsolutePath(), "-y");//create a process to decompress the file
 		decompress.redirectErrorStream(true);//merge the process's error stream into it's output stream
-		log.log("Starting " + name + " decompression");//log that the decompression portion is beginning
+		log.log("Decompressing " + name + "...");//log that the decompression portion is beginning
 		Process process = decompress.directory(zip.getParentFile()).start();//start the process in the parent directory
 		InputStream inputStream = process.getInputStream();//retrieve the process's output stream
 		int next;//create a variable for storing the bytes read off the input stream
@@ -312,12 +332,14 @@ public class IOManager
 	 * @throws DbxException If the download encountered a problem*/
 	byte[] downloadData(String remotePath) throws FileNotFoundException, IOException, DbxException
 	{
+		log.log("Downloading bytes from " + remotePath);//log that data is being downloaded
 		DbxEntry metadata = database.getMetadata(remotePath);//retrieve the file's meta-data
 		if(metadata == null){//if the specified file doesn't exist in the master database
 			throw new FileNotFoundException(remotePath + " could not be located in the master database");//except that the file couldn't be found
 		}
 		ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream((int)metadata.asFile().numBytes);//allocate a new byte output stream the same size as the file
 		database.getFile(remotePath, null, byteArrayOutputStream);//download the file into the byte output stream
+		log.log("Successfully downloaded bytes from " + remotePath);//log that the data was downloaded successfully
 		return byteArrayOutputStream.toByteArray();//return the byte array generated from the byte output stream
 	}
 
@@ -329,10 +351,13 @@ public class IOManager
 	 * @throws DbxException If the class file couldn't be downloaded properly*/
 	Class<?> downloadClass(String classPath) throws FileNotFoundException, IOException, DbxException
 	{
+		log.log("loading class: " + classPath);//log the class that is being downloaded
 		String filePath = classPath.replace('.', '/') + ".class";//get the file formatted class path
 		downloadFile(baseDirectory + "\\tasks\\" + filePath.replace('/', '\\'), "/ANDAC/taskClasses/" + filePath);//download the class file
 		try{//try to load in the class
-			return classLoader.loadClass(classPath);//load the class's file into the JVM, and return a reference to it's object representation
+			Class<?> clazz = classLoader.loadClass(classPath);//load the class's file into the JVM
+			log.log("Successfully loaded in class: " + classPath);//log that the class was loaded successfully
+			return clazz;//return a reference to the class's object representation
 		} catch(ClassNotFoundException classNotFoundException){//if the class couldn't be loaded properly
 			throw new IOException("Failed to load in class", classNotFoundException);//except that the class wasn't loaded correctly
 		}
@@ -344,16 +369,18 @@ public class IOManager
 	 * @throws DbxException If the download encountered a problem*/
 	String[] fetchTasks() throws IOException, DbxException
 	{
-		if(database.getMetadata(remoteName + "/tasks.txt") != null){//if this server has tasks queued from ANDAC
+		log.log("Fetching tasks...");//log that the tasks are being fetched
+		if((database.getMetadata(remoteName + "/LOCK") == null) && (database.getMetadata(remoteName + "/tasks.txt") != null)){//if this server has unlocked tasks queued from ANDAC
 			try{//wrapper to ensure the lock file is deleted
-				uploadData(remoteName + "/LOCK.a", new byte[] {});//lock tasks.txt
+				uploadData(remoteName + "/LOCK", new byte[] {});//lock tasks.txt
 				String[] tasks = new String(downloadData(remoteName + "/tasks.txt"), log.encoding).split("\n");//download and store all the new tasks
 				log.log(tasks.length + " new tasks downloaded");//log the number of new tasks downloaded
 				return tasks;//return the tasks
 			} finally{//ensure the lock file is deleted
-				database.delete(remoteName + "/LOCK.a");//release tasks.txt
+				database.delete(remoteName + "/LOCK");//release tasks.txt
 			}//release tasks.txt
 		}
+		log.log("No new tasks found");//log that no new tasks were found
 		return new String[] {};//return an empty array of tasks
 	}
 
@@ -388,6 +415,11 @@ public class IOManager
 		try{//try to wait for the process to fully complete
 			process.waitFor();//block until the process completes
 		} catch(InterruptedException interruptedException){}//ignore any interruptions
+		if(success){//if the network state was set successfully
+			log.log("Successfully set network state: " + stateString + "d");//log that the network state was set successfully
+		} else{//if the network state couldn't be set
+			log.log("Failed to set the network state: " + stateString + "d");//log that the network state wasn't set successfully
+		}
 		return success;//return whether all the processes were successful
 	}
 }
