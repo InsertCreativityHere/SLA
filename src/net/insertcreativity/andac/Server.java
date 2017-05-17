@@ -1,8 +1,9 @@
-//Do we really even need servers actually? If sockets are going to be this much of a hassle,
-//why not just distribute everything across the clients equally.
+
 package net.insertcreativity.andac;
 
+import java.awt.BorderLayout;
 import java.io.Closeable;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.ConnectException;
 import java.net.ServerSocket;
@@ -10,31 +11,110 @@ import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.HashMap;
+import javax.swing.BoxLayout;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JTextField;
 import net.insertcreativity.util.LogPrinter;
+import net.insertcreativity.util.MinimalStack;
 
 public class Server
 {
-	/**Map of all the clients connected to this server indexed by their names, also it's own lock*/
-	private final HashMap<String, ClientManager> clientManagers;
-	/**Reference to the server manager for this server*/
+	/**Map of all the clients connected to this server keyed by name, also it's own lock*/
+	private final HashMap<String, ClientManager> clients;
+	/**Reference to the server manager used by this server*/
 	private final ServerManager serverManager;
-	/**Reference to this GUI manager for this server*/
-	private GuiManager guiManager;
-	/**Reference to the logger for this server*/
+	/**Reference to this GUI manager used by this server*/
+	private final GuiManager guiManager;
+	/**Reference to the log this server should write all it's activity to*/
 	private final LogPrinter log;
-	/**The name for this server to use in ANDAC*/
+	/**Stack of all the tSasks currently assigned to this server*/
+	private final MinimalStack<String> tasks;
+	/**The name of this server*/
 	private final String serverName;
-	/**Flag for whether or not the server is in cloaking mode*/
+	/**Flag for whether or not the server is currently cloaked*/
 	private boolean isCloaked;
-	
-	/**Wrapper for the server manager's implementation; necessary because the server manager impl might construct a new copy of
-	 * itself as a form of self repair, in which case any references will remain to the old broken copy. This wrapper ensures
-	 * that a reference is always kept to the newest server manager implementation*/
+
+	/**Creates a new server on the specified ports, and starts all it's relevant threads
+	 * @param logPrinter Log printer that this server should log it's activity to, null if logging is disabled
+	 * @param name The name of this server
+	 * @param inputPort The port that this server should establish input connections through
+	 * @param ouptutPort The port that this server should establish output connections through
+	 * @throws IOException If the server couldn't be constructed correctly*/
+	public Server(LogPrinter logPrinter, String name, int inputPort, int outputPort) throws IOException
+	{
+		//TODO
+	}
+
+	/**Creates a new server with the specified details
+	 * @param logPath Path for the file this server should log it's activity to, null if logging is disabled
+	 * @param name The name of this server
+	 * @param inputPort The port that this server should establish input connections through
+	 * @param ouptutPort The port that this server should establish output connections through
+	 * @return A new server with all it's threads initialized and running already
+	 * @throws IOException If the server couldn't be constructed correctly*/
+	public static Server openServer(String logPath, String name, int inputPort, int outputPort) throws IOException
+	{
+		LogPrinter logPrinter = new LogPrinter();//create a new log printer
+		if(logPath != null){//if logging should be enabled for this server
+			logPrinter.addOutput("logFile", new FileOutputStream(logPath, true));//add the log file as an output to the log printer
+		}
+		logPrinter.addOutput("SysOut", System.out);//add the system's output stream as an output to the log printer
+		try{//try to create and return a new server
+			return new Server(logPrinter, name, inputPort, outputPort);//create the new server
+		} catch(Exception exception){//if the server couldn't be created
+			logPrinter.close();//close the log printer
+			throw exception;//propagate the exception
+		}
+	}
+
+	/**Creates a new server through the server creation dialogue where the user inputs the server details through a GUI
+	 * @return A new server with all it's threads initialized and running already, or null if the user cancels the server creation*/
+	public static Server openServer()
+	{
+		JPanel serverPanel = new JPanel();//create a new panel for displaying everything in
+		serverPanel.setLayout(new BoxLayout(serverPanel, BoxLayout.Y_AXIS));//arrange the panel stacked vertically
+			JPanel upperPanel = new JPanel();//create a new panel for grouping all the elements on the top together
+				JPanel inputPanel = new JPanel();//create a panel for getting the input port
+				inputPanel.add(new JLabel("Input Port:"));//create a label prompting the user for the input port
+					JTextField inputField = new JTextField(6);//create a text field for the user to enter the input port into
+				inputPanel.add(inputField);//add the text field in the input panel
+			upperPanel.add(inputPanel, BorderLayout.WEST);//place the input panel in the left side of the upper panel
+				JPanel outputPanel = new JPanel();//create a panel for getting the output port
+				outputPanel.add(new JLabel("Output Port:"));//create a label prompting the user for the output port
+					JTextField outputField = new JTextField(6);//create a text field for the user to enter the output port into
+				outputPanel.add(outputField);//add the text field in the output panel
+			upperPanel.add(outputPanel, BorderLayout.NORTH);//place the input panel in the middle of the upper panel
+				JPanel namePanel = new JPanel();//create a panel for getting the server's name
+				namePanel.add(new JLabel("Server Name:"));//create a label prompting the user for the server's name
+					JTextField nameField = new JTextField(20);//create a text field for the user to enter the server's name into
+				namePanel.add(nameField);//add the text field in the name panel
+			upperPanel.add(namePanel, BorderLayout.EAST);//place the name panel in the right side of the upper panel
+		serverPanel.add(upperPanel);//place the upper panel in the top part of the server panel
+			JPanel logPanel = new JPanel();//create a panel for getting the log path
+			logPanel.add(new JLabel("Log File:"));//create a label prompting the user for the log path
+				JTextField logField = new JTextField(50);//create a text field for the user to enter the log path into
+			logPanel.add(logField);//place the text field in the log panel
+		serverPanel.add(logPanel);//place the log panel in the bottom part of the server panel
+		while(JOptionPane.showOptionDialog(null, serverPanel, "Open a Server", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, new Object[] {"Start Server"}, null) == 0){//while the user keeps pressing the 'Start Server' button
+			try{//try to create a new server with the user specified information
+				return openServer(logField.getText(), nameField.getText(), Integer.parseInt(inputField.getText()), Integer.parseInt(outputField.getText()));//open a new server and attempt to return it
+			} catch(Exception exception){//if the server coudln't be created
+				JOptionPane.showInternalMessageDialog(serverPanel, exception, "Error", JOptionPane.ERROR_MESSAGE);//inform the user of the error
+			}
+		}
+		return null;//return null if the user cancelled the server's creation
+	}
+
+	/**Wrapper class for the server manager. This is necessary because the underlying server manager might construct a copy
+	 * of itself as a form of self-repair, in which case any remaining references will be to the old copy. This wrapper
+	 * ensures that it will always be a reference to the most recent server manager*/
 	private class ServerManager implements Closeable
 	{
-		/**Reference to the underlying server manager implementation, also it's own lock*/
+		/**Reference to the underlying server manager implementation*/
 		private ServerManagerImpl serverManagerImpl;
-		
+
 		/**Creates a new server manager on the specified ports
 		 * @param inputPort The port number to establish the server's input socket on
 		 * @param outputPort The port number to establish the server's output socket on
@@ -43,25 +123,25 @@ public class Server
 		{
 			serverManagerImpl = new ServerManagerImpl(inputPort, outputPort);//create the underlying server manager implementation
 		}
-		
+
 		/**Starts the underlying server manager implementation's thread*/
 		private void runServer()
 		{
 			serverManagerImpl.start();//start the underlying server manager thread
 		}
-		
+
 		/**Closes the underlying server manager implementation
 		 * @throws IOException If the underlying server manager implementation couldn't be closed*/
 		public void close() throws IOException
 		{
-			synchronized(serverManagerImpl){//lock serverManagerImpl
-				serverManagerImpl.close();//close the underlying server manager thread
-			}//release serverManagerImpl
+			serverManagerImpl.close();//close the underlying server manager thread
 		}
-		
+
+
+
 		/**Class for encapsulating all the functionality of this server, listens for requested connections, and creates new
 		 * ClientManagers for handling them. Terminates when the serverInput socket is closed, and keepRunning is false,
-		 * otherwise will attempt a self-repair.*/
+		 * otherwise will attempt a self-repair. TODO*/
 		private class ServerManagerImpl extends Thread implements Closeable
 		{
 			/**The input server socket that is used to establish input connections with new clients*/
@@ -72,7 +152,7 @@ public class Server
 			private volatile ServerManagerImpl parent = null;
 			/**Flag for whether or not the server manager should continue running*/
 			private volatile boolean keepRunning = true;
-			
+
 			/**Creates a new server manager on the specified ports
 			 * @param inputPort The port number to establish the server's input socket on
 			 * @param outputPort The port number to establish the server's output socket on
@@ -113,7 +193,7 @@ public class Server
 				serverOutput = tempOutput;//set the server's output socket
 				log.log("Successfully created server manager");//log the successful creation of the server manager
 			}
-			
+
 			/**Runs the server manager thread, which listens for client connections, determines which are valid, and creates
 			 * client managers for the clients who get accepted*/
 			public void run()
@@ -187,7 +267,7 @@ public class Server
 					}//release serverInput, keepRunning, parent
 				}
 			}
-			
+
 			/**Closes the server manager by closing it's underlying sockets
 			 * @throws IOException if the server's sockets couldn't be closed*/
 			public void close() throws IOException
@@ -204,16 +284,16 @@ public class Server
 			}
 		}
 	}
-	
+
 	//TODO
 	private class ClientManager implements Runnable, Closeable
 	{
-		
+
 	}
-	
+
 	//TODO
 	private class GuiManager implements Runnable, Closeable
 	{
-		
+
 	}
 }
