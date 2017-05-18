@@ -76,27 +76,27 @@ public class Server implements Closeable//TODO http://www.techrepublic.com/artic
 	{
 		JPanel serverPanel = new JPanel();//create a new panel for displaying everything in
 		serverPanel.setLayout(new BoxLayout(serverPanel, BoxLayout.Y_AXIS));//arrange the panel stacked vertically
-			JPanel upperPanel = new JPanel();//create a new panel for grouping all the elements on the top together
-				JPanel inputPanel = new JPanel();//create a panel for getting the input port
-				inputPanel.add(new JLabel("Input Port:"));//create a label prompting the user for the input port
-					JTextField inputField = new JTextField(6);//create a text field for the user to enter the input port into
-				inputPanel.add(inputField);//add the text field in the input panel
-			upperPanel.add(inputPanel, BorderLayout.WEST);//place the input panel in the left side of the upper panel
-				JPanel outputPanel = new JPanel();//create a panel for getting the output port
-				outputPanel.add(new JLabel("Output Port:"));//create a label prompting the user for the output port
-					JTextField outputField = new JTextField(6);//create a text field for the user to enter the output port into
-				outputPanel.add(outputField);//add the text field in the output panel
-			upperPanel.add(outputPanel, BorderLayout.NORTH);//place the input panel in the middle of the upper panel
-				JPanel namePanel = new JPanel();//create a panel for getting the server's name
-				namePanel.add(new JLabel("Server Name:"));//create a label prompting the user for the server's name
-					JTextField nameField = new JTextField(20);//create a text field for the user to enter the server's name into
-				namePanel.add(nameField);//add the text field in the name panel
-			upperPanel.add(namePanel, BorderLayout.EAST);//place the name panel in the right side of the upper panel
+		JPanel upperPanel = new JPanel();//create a new panel for grouping all the elements on the top together
+		JPanel inputPanel = new JPanel();//create a panel for getting the input port
+		inputPanel.add(new JLabel("Input Port:"));//create a label prompting the user for the input port
+		JTextField inputField = new JTextField(6);//create a text field for the user to enter the input port into
+		inputPanel.add(inputField);//add the text field in the input panel
+		upperPanel.add(inputPanel, BorderLayout.WEST);//place the input panel in the left side of the upper panel
+		JPanel outputPanel = new JPanel();//create a panel for getting the output port
+		outputPanel.add(new JLabel("Output Port:"));//create a label prompting the user for the output port
+		JTextField outputField = new JTextField(6);//create a text field for the user to enter the output port into
+		outputPanel.add(outputField);//add the text field in the output panel
+		upperPanel.add(outputPanel, BorderLayout.NORTH);//place the input panel in the middle of the upper panel
+		JPanel namePanel = new JPanel();//create a panel for getting the server's name
+		namePanel.add(new JLabel("Server Name:"));//create a label prompting the user for the server's name
+		JTextField nameField = new JTextField(20);//create a text field for the user to enter the server's name into
+		namePanel.add(nameField);//add the text field in the name panel
+		upperPanel.add(namePanel, BorderLayout.EAST);//place the name panel in the right side of the upper panel
 		serverPanel.add(upperPanel);//place the upper panel in the top part of the server panel
-			JPanel logPanel = new JPanel();//create a panel for getting the log path
-			logPanel.add(new JLabel("Log File:"));//create a label prompting the user for the log path
-				JTextField logField = new JTextField(50);//create a text field for the user to enter the log path into
-			logPanel.add(logField);//place the text field in the log panel
+		JPanel logPanel = new JPanel();//create a panel for getting the log path
+		logPanel.add(new JLabel("Log File:"));//create a label prompting the user for the log path
+		JTextField logField = new JTextField(50);//create a text field for the user to enter the log path into
+		logPanel.add(logField);//place the text field in the log panel
 		serverPanel.add(logPanel);//place the log panel in the bottom part of the server panel
 		while(JOptionPane.showOptionDialog(null, serverPanel, "Open a Server", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, new Object[] {"Start Server"}, null) == 0){//while the user keeps pressing the 'Start Server' button
 			try{//try to create a new server with the user specified information
@@ -200,56 +200,56 @@ public class Server implements Closeable//TODO http://www.techrepublic.com/artic
 				try{//wrapper for the server manager loop
 					while(keepRunning){//while the server manager should continue running
 						Socket inputSocket = serverInput.accept();//block until a connection is available and accept it
-						
-						
-						
-						
+
+
+
+
 						try{//try to close the input socket
 							inputSocket.close();//close the input socket
 						} catch(IOException ioException){
-							
+
 						}
-						
-						
-						
+
+
+
 						try{//try to listen for a connection and accept it if valid
 							Socket inputSocket = serverInput.accept();//block until a connection is available and accept it
-							
+
 						}
-						
-						
-						
-						
-						
+
+
+
+
+
 						Socket inputSocket = null;//variable for holding the inputSocket if it needs to be closed in the finally block
 						Socket outputSocket = null;//variable for holding the outputSocket if it needs to be closed in the finally block
 						boolean dropConnection = false;//flag for whether the connection should be dropped in the finally block
 						try{//try to listen for a new client connection and attempt to accept it
-							
+
 						} finally{//ensure the connection gets dropped if it should be
 							if(dropConnection){//if the connection should be dropped
 								try{//try to close the input socket
 									inputSocket.close();
 								} catch(Exception exception){
-									
+
 								}
 								try{
 									outputSocket.close();
 								} catch(Exception exception){
-									
+
 								}
 							}
 						}
-						
-						
-						
+
+
+
 						input
-						
-						
-						
-						
-						
-						
+
+
+
+
+
+
 						try{//try to listen for a new client connection and attempt to accept it
 							inputSocket = serverInput.accept();//block until a connection is available and accept it
 							log.log("New connection [" + inputSocket.getRemoteSocketAddress().toString() + "]");//log the new connection
@@ -259,14 +259,14 @@ public class Server implements Closeable//TODO http://www.techrepublic.com/artic
 									byte[] nameBytes = new byte[inputStream.read()];//allocate bytes for the client's name
 									inputStream.read(nameBytes);//read in the client's name
 								} catch(IOException ioException){//if the client's name couldn't be read
-									
+
 								}
-								
+
 								//TODO also make the streams into secure streams or something...
 								//TODO get the 'name' here or something, also 'outputSocket'
-								
-								
-								
+
+
+
 								if(clients.containsKey(name)){//if this is an existent connection
 									clients.get(name).reestablishConnection(inputSocket, outputSocket);//reestablish the client's connection
 									log.log("Successfully re-established connection [" + name + ":" + inputSocket.getRemoteSocketAddress() + "]");//log the connection succeeded
@@ -290,17 +290,17 @@ public class Server implements Closeable//TODO http://www.techrepublic.com/artic
 							inputStream = null;
 							name = null;
 						}
-						
-						
-						
-						
-						
-						
-						
-						
-						
-						
-						
+
+
+
+
+
+
+
+
+
+
+
 					}
 				} catch(Exception exception){
 					if(!(exception instanceof SocketException) || (keepRunning)){//if this isn't an expected socket closure exception
@@ -364,6 +364,15 @@ public class Server implements Closeable//TODO http://www.techrepublic.com/artic
 					}
 				}//release serverInput, keepRunning, parent
 			}
+		}
+	}
+
+	//TODO
+	private class ServerManger implements Runnable, Closeable
+	{
+		private class ServerManagerImpl implements Closeable
+		{
+
 		}
 	}
 

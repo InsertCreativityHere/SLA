@@ -123,17 +123,17 @@ public class IOManager
 		if(ioManager.database.createFolder(ioManager.remoteName + "/Clients") != null){//if the server's clients folder was just created
 			logPrinter.log("Created results folder for server in ANDAC");//log that the server's clients folder was just created
 		}
-		File logFile = new File(serverDirectory, "log.txt");//create a reference to the server's log file
-		if(ioManager.database.getMetadata(ioManager.remoteName + "/log.txt") == null){//if this server doesn't have a log file in ANDAC
+		File logFile = new File(serverDirectory, "log.dat");//create a reference to the server's log file
+		if(ioManager.database.getMetadata(ioManager.remoteName + "/log.dat") == null){//if this server doesn't have a log file in ANDAC
 			logFile.createNewFile();//create a new log file for the server
-			ioManager.uploadFile(ioManager.remoteName + "/log.txt", logFile.getAbsolutePath());//upload the new log file to ANDAC
+			ioManager.uploadFile(ioManager.remoteName + "/log.dat", logFile.getAbsolutePath());//upload the new log file to ANDAC
 			logPrinter.log("Successfully created new log file for " + serverName);//log that the server's log file was created
 		} else{//if this server has a log file in ANDAC
-			ioManager.downloadFile(ioManager.remoteName + "/log.txt", logFile.getAbsolutePath());//download the server's log file
+			ioManager.downloadFile(ioManager.remoteName + "/log.dat", logFile.getAbsolutePath());//download the server's log file
 			logPrinter.log("Retrieved server log file from ANDAC");//log that the server's log file has been successfully downloaded
 		}
-		if(ioManager.database.getMetadata(ioManager.remoteName + "/status.txt") == null){//if this server doesn't have a status file in ANDAC
-			ioManager.uploadData(ioManager.remoteName + "/status.txt", new byte[] {});//upload an empty status file to ANDAC
+		if(ioManager.database.getMetadata(ioManager.remoteName + "/status.dat") == null){//if this server doesn't have a status file in ANDAC
+			ioManager.uploadData(ioManager.remoteName + "/status.dat", new byte[] {});//upload an empty status file to ANDAC
 			logPrinter.log("Successfully created new status file for " + serverName);//log that the server's status file was created
 		}
 		logPrinter.log("Successfully created new server IO manager at: " + serverDirectory.getAbsolutePath());//log that the server io manager was created successfully
@@ -156,33 +156,42 @@ public class IOManager
 		return ioManager;//return the new io manager created for the client
 	}
 
-	/**TODO*/
+	/**Creates an entry in ANDAC for this client, and additional files in it's local architecture so it can
+	 * communicate in a cloaked fashion
+	 * @throws IOException If there's an issues creating the local files
+	 * @throws DbxException If there's an issue creating the remote files in ANDAC*/
 	void setClientCloaked() throws IOException, DbxException
 	{
 		log.log("Cloaking this client connection");//log that this client is having it's connections cloaked
-		File logFile = new File(baseDirectory, "log.txt");//create a reference to the client's log file
+		File logFile = new File(baseDirectory, "log.dat");//create a reference to the client's log file
 		logFile.createNewFile();//create a new log file for the client
-		uploadFile(remoteName + "/log.txt", logFile.getAbsolutePath());//upload the new log file to ANDAC
+		uploadFile(remoteName + "/log.dat", logFile.getAbsolutePath());//upload the new log file to ANDAC
 		log.log("Successfully created new log file for " + serverName);//log that the client's log file was created
-		uploadData(remoteName + "/status.txt", new byte[] {});//upload an empty status file to ANDAC
+		uploadData(remoteName + "/status.dat", new byte[] {});//upload an empty status file to ANDAC
 		log.log("Successfully created new status file for " + serverName);//log that the client's status file was created
 		log.log("Cloaking complete");//log that the client was cloaked successfully
 	}
 
-	/**TODO*/
+	/**Removes this client's entry in ANDAC, and it's local files as well, storing all their relevant content in a
+	 * string array, as these are unnecessary for an uncloaked client
+	 * @return An array containing this client's status string ([0]), leftover log data ([1]), and tasks strings in that order ([2~])
+	 * @throws IOException If there's an issue removing the local files
+	 * @throws DbxException If there's an issue removing the remote ANDAC files*/
 	String[] setClientUncloaked() throws IOException, DbxException
 	{
 		log.log("Uncloaking this client connection");//log that this client is having it's connections uncloaked
 		String[] tasks = fetchTasks();//fetch all the leftover tasks for this client
 		String[] remoteData = new String[tasks.length + 2];//create an array for holding all the client's remote data in
 		System.arraycopy(tasks, 0, remoteData, 2, tasks.length);//copy the leftover tasks into the remote data array
-		if(database.getMetadata(remoteName + "/log.txt") != null){//if this client has a log file in ANDAC
-			remoteData[0] = new String(downloadData(remoteName + "/log.txt"), log.encoding);//download the client's log into the remote data array
-			log.log("Successfully retrieved remote log data");//log that the client's log data was downloaded successfully
-		}
-		if(database.getMetadata(remoteName + "/status.txt") != null){//if this client has a status file in ANDAC
-			remoteData[1] = new String(downloadData(remoteName + "/status.txt"), log.encoding);//download the client's status file into the remote data array
+		if(database.getMetadata(remoteName + "/status.dat") != null){//if this client has a status file in ANDAC
+			remoteData[0] = new String(downloadData(remoteName + "/status.dat"), log.encoding);//download the client's status file into the remote data array
 			log.log("Successfully retrieved remote status data");//log that the client's status data was downloaded successfully
+		}
+		updateANDAC("");//flush the leftover's of this client's log into ANDAC
+		Util.delete(new File(baseDirectory, "log.dat"));//delete the client's log file
+		if(database.getMetadata(remoteName + "/log.dat") != null){//if this client has a log file in ANDAC
+			remoteData[1] = new String(downloadData(remoteName + "/log.dat"), log.encoding);//download the client's log into the remote data array
+			log.log("Successfully retrieved remote log data");//log that the client's log data was downloaded successfully
 		}
 		database.delete(remoteName);//delete this client's ANDAC entry
 		log.log("Uncloaking complete");//log that the client was uncloaked successfully
@@ -221,7 +230,7 @@ public class IOManager
 	 * @param remotePath The path to give this data's file in the master database
 	 * @param data The data to upload, stored as an array of bytes
 	 * @return Meta-data about the upload as a DbxEntry
-	 * @throws IOException If the data can't be read properly
+	 * @throws IOException If the data couldn't be written properly
 	 * @throws DbxException If the upload encounters a problem*/
 	private DbxEntry uploadData(String remotePath, byte[] data) throws IOException, DbxException
 	{
@@ -233,14 +242,14 @@ public class IOManager
 
 	/**Updates the server's log and status files in ANDAC
 	 * @param status The formatted status string of this server to be uploaded
-	 * @throws IOException If the data can't be written properly
-	 * @throws DbxException If the download encounters a problem*/
+	 * @throws IOException If the data couldn't be written properly
+	 * @throws DbxException If the upload encounters a problem*/
 	void updateANDAC(String status) throws IOException, DbxException
 	{
 		log.log("Updating ANDAC log and status files...");//log that the log and status files are being updated in ANDAC
-		uploadData(remoteName + "/status.txt", status.getBytes(log.encoding));//upload the status string to this server's status file
+		uploadData(remoteName + "/status.dat", status.getBytes(log.encoding));//upload the status string to this server's status file
 		synchronized(log){//lock log
-			uploadFile(remoteName + "/log.txt", new File(baseDirectory, "log.txt").getAbsolutePath());//upload this server's log file to it's ANDAC entry
+			uploadFile(remoteName + "/log.dat", new File(baseDirectory, "log.dat").getAbsolutePath());//upload this server's log file to it's ANDAC entry
 		}//release log
 		log.log("Updated ANDAC log and status files");//log that the log and status files were updated in ANDAC
 	}
@@ -262,11 +271,31 @@ public class IOManager
 		uploadData(serverName + "/Results/" + name + ".dat", byteArrayOutputStream.toByteArray());//upload the byte array of results into a results file in ANDAC
 		log.log("Succesfully uploaded results for: " + name);//log that the results were uploaded successfully
 	}
-	
-	//TODO
-	void uploadTasks()
+
+	/**Uploads new tasks to a cloaked client in ANDAC
+	 * (this operation is blocking, and may take time if it happens to check while the tasks file is being modified)
+	 * @param destination The ANDAC name of the client to send the tasks to
+	 * @param tasks A string containing all the tasks to be sent
+	 * @throws IOException If the data couldn't be written properly
+	 * @throws DbxException If the data couldn't be uploaded properly*/
+	void uploadTasks(String destination, String tasks) throws IOException, DbxException
 	{
-		
+		log.log("Uploading new tasks to " + destination);//log how many tasks are being sent and where to
+		while(database.getMetadata(destination + "/client.lock") != null){//while the client has the tasks file locked
+			try{//try to sleep
+				Thread.sleep(500);//sleep for 0.5 seconds
+			} catch(InterruptedException interruptedException){}//ignore any interruptions
+		}
+		try{//wrapper to ensure the lock file is deleted
+			uploadData(destination + "/server.lock", new byte[] {});//lock tasks.dat
+			if(database.getMetadata(destination + "/tasks.dat") != null){//if there are leftover tasks
+				tasks = new String(downloadData(destination + "/tasks.dat"), log.encoding) + "#next#" + tasks;//copy the old tasks over
+			}
+			uploadData(destination + "/tasks.dat", tasks.getBytes(log.encoding));//upload all the tasks
+		} finally{//ensure the lock file is deleted
+			database.delete(destination + "/server.lock");//release tasks.dat
+		}
+		log.log("Successfully sent tasks to " + destination);//log that the tasks were sent successfully
 	}
 
 	/**Downloads a file from the master database
@@ -364,24 +393,37 @@ public class IOManager
 	}
 
 	/**Checks ANDAC to see if any new tasks are queued for this server, downloading any that are
+	 * (this operation is blocking, and may take time if it happens to check while the tasks file is being modified)
 	 * @return An array of strings containing the tasks to be executed by the server
 	 * @throws IOException If the data couldn't be retrieved properly
 	 * @throws DbxException If the download encountered a problem*/
 	String[] fetchTasks() throws IOException, DbxException
 	{
 		log.log("Fetching tasks...");//log that the tasks are being fetched
-		if((database.getMetadata(remoteName + "/LOCK") == null) && (database.getMetadata(remoteName + "/tasks.txt") != null)){//if this server has unlocked tasks queued from ANDAC
-			try{//wrapper to ensure the lock file is deleted
-				uploadData(remoteName + "/LOCK", new byte[] {});//lock tasks.txt
-				String[] tasks = new String(downloadData(remoteName + "/tasks.txt"), log.encoding).split("\n");//download and store all the new tasks
-				log.log(tasks.length + " new tasks downloaded");//log the number of new tasks downloaded
-				return tasks;//return the tasks
-			} finally{//ensure the lock file is deleted
-				database.delete(remoteName + "/LOCK");//release tasks.txt
-			}//release tasks.txt
+		while(database.getMetadata(remoteName + "/server.lock") != null){//while the server has the tasks file locked
+			try{//try to sleep
+				Thread.sleep(500);//sleep for 0.5 seconds
+			} catch(InterruptedException interruptedException){}//ignore any interruptions
 		}
-		log.log("No new tasks found");//log that no new tasks were found
-		return new String[] {};//return an empty array of tasks
+		try{//wrapper to ensure the lock file gets deleted
+			uploadData(remoteName + "/client.lock", new byte[] {});//lock tasks.dat
+			while(database.getMetadata(remoteName + "/server.lock") != null){//while the server has the tasks file locked
+				try{//try to sleep
+					Thread.sleep(500);//sleep for 0.5 seconds
+				} catch(InterruptedException interruptedException){}//ignore any interruptions
+			}
+			if(database.getMetadata(remoteName + "/tasks.dat") == null){//if there are no new tasks to download
+				log.log("No new tasks found");//log that no new tasks were found
+				return new String[] {};//return an empty array of tasks
+			} else{//if there are new tasks to download
+				String[] tasks = new String(downloadData(remoteName + "/tasks.dat"), log.encoding).split("\n");//download and store all the new tasks
+				database.delete(remoteName + "/tasks.dat");//delete the tasks now that they've been received
+				log.log(tasks.length + " new tasks downloaded");//log the number of new tasks downloaded
+				return tasks;//return the new tasks
+			}
+		} finally{//ensure the lock file is deleted
+			database.delete(remoteName + "/client.lock");//release tasks.dat
+		}
 	}
 
 	/**Sets the state of the host computer's physical network adapters to either disabled or enabled
