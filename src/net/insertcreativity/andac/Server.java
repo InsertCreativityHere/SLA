@@ -20,24 +20,24 @@ import javax.swing.JTextField;
 import net.insertcreativity.util.LogPrinter;
 import net.insertcreativity.util.MinimalStack;
 
-public class Server implements Closeable//TODO http://www.techrepublic.com/article/protect-your-network-traffic-using-javas-encryption-features/ USE ENCRYPTION
+public class Server extends Thread implements Closeable
 {
 	/**Map of all the clients connected to this server keyed by name, also it's own lock*/
 	private final HashMap<String, ClientManager> clients;
 	/**Reference to the server manager used by this server*/
-	private final ServerManager serverManager;
-	/**Reference to this GUI manager used by this server*/
+	private ServerManager serverManager;
+	/**Reference to the GUI manager used by this server*/
 	private final GuiManager guiManager;
-	/**Reference to the log this server should write all it's activity to*/
+	/**Reference to the log printer this server should log all it's activity to*/
 	private final LogPrinter log;
-	/**Stack of all the tSasks currently assigned to this server*/
+	/**Stack of all the tasks currently assigned to this server*/
 	private final MinimalStack<String> tasks;
-	/**The name of this server*/
+	/**The ANDAC name of this server*/
 	private final String serverName;
 	/**Flag for whether or not the server is currently cloaked*/
 	private boolean isCloaked;
 
-	/**Creates a new server on the specified ports, and starts all it's relevant threads
+	/**Creates a new server on the specified ports
 	 * @param logPrinter Log printer that this server should log it's activity to, null if logging is disabled
 	 * @param name The name of this server
 	 * @param inputPort The port that this server should establish input connections through
@@ -53,15 +53,16 @@ public class Server implements Closeable//TODO http://www.techrepublic.com/artic
 	 * @param name The name of this server
 	 * @param inputPort The port that this server should establish input connections through
 	 * @param ouptutPort The port that this server should establish output connections through
-	 * @return A new server with all it's threads initialized and running already
+	 * @return A new server from the specified details
 	 * @throws IOException If the server couldn't be constructed correctly*/
 	public static Server openServer(String logPath, String name, int inputPort, int outputPort) throws IOException
 	{
-		LogPrinter logPrinter = new LogPrinter();//create a new log printer
+		LogPrinter logPrinter = null;//declare a log printer
 		if(logPath != null){//if logging should be enabled for this server
+			logPrinter = new LogPrinter();//create a new log printer
 			logPrinter.addOutput("logFile", new FileOutputStream(logPath, true));//add the log file as an output to the log printer
+			logPrinter.addOutput("SysOut", System.out);//add the system's output stream as an output to the log printer
 		}
-		logPrinter.addOutput("SysOut", System.out);//add the system's output stream as an output to the log printer
 		try{//try to create and return a new server
 			return new Server(logPrinter, name, inputPort, outputPort);//create the new server
 		} catch(Exception exception){//if the server couldn't be created
@@ -71,42 +72,59 @@ public class Server implements Closeable//TODO http://www.techrepublic.com/artic
 	}
 
 	/**Creates a new server through the server creation dialogue where the user inputs the server details through a GUI
-	 * @return A new server with all it's threads initialized and running already, or null if the user cancels the server creation*/
+	 * @return A new server, or null if the user cancels the server creation*/
 	public static Server openServer()
 	{
 		JPanel serverPanel = new JPanel();//create a new panel for displaying everything in
 		serverPanel.setLayout(new BoxLayout(serverPanel, BoxLayout.Y_AXIS));//arrange the panel stacked vertically
-		JPanel upperPanel = new JPanel();//create a new panel for grouping all the elements on the top together
-		JPanel inputPanel = new JPanel();//create a panel for getting the input port
-		inputPanel.add(new JLabel("Input Port:"));//create a label prompting the user for the input port
-		JTextField inputField = new JTextField(6);//create a text field for the user to enter the input port into
-		inputPanel.add(inputField);//add the text field in the input panel
-		upperPanel.add(inputPanel, BorderLayout.WEST);//place the input panel in the left side of the upper panel
-		JPanel outputPanel = new JPanel();//create a panel for getting the output port
-		outputPanel.add(new JLabel("Output Port:"));//create a label prompting the user for the output port
-		JTextField outputField = new JTextField(6);//create a text field for the user to enter the output port into
-		outputPanel.add(outputField);//add the text field in the output panel
-		upperPanel.add(outputPanel, BorderLayout.NORTH);//place the input panel in the middle of the upper panel
-		JPanel namePanel = new JPanel();//create a panel for getting the server's name
-		namePanel.add(new JLabel("Server Name:"));//create a label prompting the user for the server's name
-		JTextField nameField = new JTextField(20);//create a text field for the user to enter the server's name into
-		namePanel.add(nameField);//add the text field in the name panel
-		upperPanel.add(namePanel, BorderLayout.EAST);//place the name panel in the right side of the upper panel
+			JPanel upperPanel = new JPanel();//create a new panel for grouping all the elements on the top together
+				JPanel inputPanel = new JPanel();//create a panel for getting the input port
+				inputPanel.add(new JLabel("Input Port:"));//create a label prompting the user for the input port
+					JTextField inputField = new JTextField(6);//create a text field for the user to enter the input port into
+				inputPanel.add(inputField);//add the text field in the input panel
+			upperPanel.add(inputPanel, BorderLayout.WEST);//place the input panel in the left side of the upper panel
+				JPanel outputPanel = new JPanel();//create a panel for getting the output port
+				outputPanel.add(new JLabel("Output Port:"));//create a label prompting the user for the output port
+					JTextField outputField = new JTextField(6);//create a text field for the user to enter the output port into
+				outputPanel.add(outputField);//add the text field in the output panel
+			upperPanel.add(outputPanel, BorderLayout.NORTH);//place the input panel in the middle of the upper panel
+				JPanel namePanel = new JPanel();//create a panel for getting the server's name
+				namePanel.add(new JLabel("Server Name:"));//create a label prompting the user for the server's name
+					JTextField nameField = new JTextField(20);//create a text field for the user to enter the server's name into
+				namePanel.add(nameField);//add the text field in the name panel
+			upperPanel.add(namePanel, BorderLayout.EAST);//place the name panel in the right side of the upper panel
 		serverPanel.add(upperPanel);//place the upper panel in the top part of the server panel
-		JPanel logPanel = new JPanel();//create a panel for getting the log path
-		logPanel.add(new JLabel("Log File:"));//create a label prompting the user for the log path
-		JTextField logField = new JTextField(50);//create a text field for the user to enter the log path into
-		logPanel.add(logField);//place the text field in the log panel
+			JPanel logPanel = new JPanel();//create a panel for getting the log path
+			logPanel.add(new JLabel("Log File:"));//create a label prompting the user for the log path
+				JTextField logField = new JTextField(50);//create a text field for the user to enter the log path into
+			logPanel.add(logField);//place the text field in the log panel
 		serverPanel.add(logPanel);//place the log panel in the bottom part of the server panel
 		while(JOptionPane.showOptionDialog(null, serverPanel, "Open a Server", JOptionPane.DEFAULT_OPTION, JOptionPane.PLAIN_MESSAGE, null, new Object[] {"Start Server"}, null) == 0){//while the user keeps pressing the 'Start Server' button
 			try{//try to create a new server with the user specified information
-				return openServer(logField.getText(), nameField.getText(), Integer.parseInt(inputField.getText()), Integer.parseInt(outputField.getText()));//open a new server and attempt to return it
+				return openServer(((logField.getText().length() == 0)? null:logField.getText()), nameField.getText(), Integer.parseInt(inputField.getText()), Integer.parseInt(outputField.getText()));//open a new server and attempt to return it
 			} catch(Exception exception){//if the server coudln't be created
 				JOptionPane.showInternalMessageDialog(serverPanel, exception, "Error", JOptionPane.ERROR_MESSAGE);//inform the user of the error
 			}
 		}
 		return null;//return null if the user cancelled the server's creation
 	}
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
+	
 
 	/**Wrapper class for the server manager. This is necessary because the underlying server manager might construct a copy
 	 * of itself as a form of self-repair, in which case any remaining references will be to the old copy. This wrapper
@@ -387,4 +405,6 @@ public class Server implements Closeable//TODO http://www.techrepublic.com/artic
 	{
 
 	}
+	
+	//TODO http://www.techrepublic.com/article/protect-your-network-traffic-using-javas-encryption-features/ USE ENCRYPTION
 }
